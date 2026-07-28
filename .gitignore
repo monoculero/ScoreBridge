@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+logs/
+
+# Cache
+cache/
+
+# Test files
+*.hi
+*.nv
+
+# Configuración local
+config.local.ini
