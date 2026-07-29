@@ -9,6 +9,7 @@ __pycache__/
 
 # Archivos de configuración local (puedes subir un config.example.json)
 config.json
+loader.bat
 
 # Archivos de puntuación locales/de prueba
 hi/
