@@ -1,1 +1,11 @@
-{"rom":"ffight","encoding":"BCD","score_length":4,"initials_length":3}
+{
+  "game_id": "ffight",
+  "name": "Final Fight",
+  "system": "Capcom CPS-1",
+  "reader_type": "CPS1HiScoreReader",
+  "entry_size": 8,
+  "score_bytes": 4,
+  "score_offset": 0,
+  "name_bytes": 3,
+  "name_offset": 5
+}

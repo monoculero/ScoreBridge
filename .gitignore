@@ -1,25 +1,19 @@
-# Python
+# Entornos virtuales de Python
+.venv/
+venv/
+env/
+
+# Archivos compilados y cache de Python
 __pycache__/
 *.pyc
 
-# Virtual environment
-.venv/
+# Archivos de configuración local (puedes subir un config.example.json)
+config.json
 
-# VS Code
-.vscode/
-
-# macOS
-.DS_Store
-
-# Logs
-logs/
-
-# Cache
-cache/
-
-# Test files
+# Archivos de puntuación locales/de prueba
+hi/
 *.hi
-*.nv
 
-# Configuración local
-config.local.ini
+# Archivos de configuración de IDEs
+.vscode/
+.idea/
