@@ -84,7 +84,7 @@ def main():
     if target_rom not in games:
         print(f" [Auto-discovery] Nueva ROM detectada: '{target_rom}'. Añadiendo a config.json...")
         new_game_entry = {
-            "name": target_rom.upper(),
+            "name": target_rom.lower(),
             "hi_file": f"{target_rom}.hi",
             "initials": default_initials,
             "iscored_id": None  # Lo dejas listo para ponerle el ID de iScored cuando lo crees en su web
