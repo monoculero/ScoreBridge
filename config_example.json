@@ -1,0 +1,16 @@
+{
+  "default_initials": "ABC",
+  "hi_folder": "path_folder_hi_scrores_files",
+  "iscored": {
+    "enabled": true,
+    "gameroom": "name_of_your_gameroom"
+  },
+  "games": {
+    "sf2": {
+      "name": "Street Fighter II",
+      "hi_file": "sf2.hi",
+      "initials": "ABC",
+      "iscored_id": "ID_ISCORED"
+    }
+  }
+}
