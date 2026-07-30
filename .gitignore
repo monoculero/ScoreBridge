@@ -10,6 +10,8 @@ __pycache__/
 # Archivos de configuración local (puedes subir un config.example.json)
 config.json
 loader.bat
+.gitignore
+.DS_Store
 
 # Archivos de puntuación locales/de prueba
 hi/

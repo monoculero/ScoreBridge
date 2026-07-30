@@ -103,8 +103,8 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                 # Evaluamos el resultado para lanzar la notificación visual
                 if res and getattr(res, "status_code", 200) in (200, 201):
                     show_achievement_toast(
-                        title="🏆 Puntuación Subida",
-                        message=f"{best_entry.player}: {best_entry.score:,} pts",
+                        title=f"🏆 Puntuación Subida - {game_name}",
+                        message=f"{best_entry.player}: {best_entry.score:,}",
                         is_success=True
                     )
                 else:
@@ -115,9 +115,17 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                     )
 
             elif not iscored_id:
-                print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
+                show_achievement_toast(
+                    title="ℹ️ iScored",
+                    message="Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.",
+                    is_success=False
+                )
         else:
-            print(f"Sin registros para las iniciales '{target_initials}'")
+            show_achievement_toast(
+                title="？ iScored",
+                message=f"Sin registros para las iniciales '{target_initials}'",
+                is_success=False
+            )
 
         print("===================================\n")
 
