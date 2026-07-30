@@ -133,6 +133,54 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_dataeast_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """
+        Lector para juegos Data East (Bad Dudes / DragonNinja, Sly Spy, etc.).
+        Estructura: 3 bytes BCD Puntuación + 3 bytes Iniciales + 2 bytes Estado/Stage.
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Archivo no encontrado: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        entry_size = 8
+
+        num_entries = len(data) // entry_size
+
+        for index in range(num_entries):
+            offset = index * entry_size
+            chunk = data[offset : offset + entry_size]
+
+            if len(chunk) < 8:
+                break
+
+            # En Bad Dudes: los primeros 3 bytes son la puntuación BCD
+            score_bytes = chunk[:3]
+            player_bytes = chunk[3:6]
+
+            player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
+            score = self._decode_bcd_score(score_bytes)
+
+            if player and score > 0:
+                entries.append(
+                    ScoreEntry(
+                        rank=index + 1,
+                        player=player,
+                        score=score
+                    )
+                )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=rom_name.upper(),
+            rom_name=rom_name,
+            entries=entries
+        )
+
     def read_table(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Lee la tabla de puntuaciones para cualquier ROM según su sistema."""
         rom_clean = rom_name.lower().strip()
@@ -141,6 +189,11 @@ class FBNeoReader:
         sega_sys16_roms = {"shinobi", "goldnaxe", "altbeast", "aliensyn", "passsht", "fantzone"}
         if rom_clean in sega_sys16_roms:
             return self.read_sega_system16(file_path, rom_clean)
+
+        # ROMs de Data East
+        dataeast_roms = {"baddudes", "drgnninja", "slyspy", "robocop"}
+        if rom_clean in dataeast_roms:
+            return self.read_dataeast_game(file_path, rom_clean)
 
         # Por defecto usa Capcom CPS1/CPS2
         return self.read_cps_game(file_path, rom_clean)
