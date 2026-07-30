@@ -1,16 +1,39 @@
+import sys
 from pathlib import Path
 
-hi_path = Path("hi/shinobi.hi")
+def inspect_hi_file(file_path: str, bytes_per_line: int = 8):
+    path = Path(file_path)
+    if not path.exists():
+        print(f"❌ Error: No se encontró el archivo '{file_path}'")
+        return
 
-if not hi_path.exists():
-    print(f"No se encuentra el archivo en {hi_path}")
-else:
-    data = hi_path.read_bytes()
-    print(f"Tamaño total del archivo: {len(data)} bytes")
-    print(f"Hex dump completo:\n{data.hex()}")
-    
-    # Probamos a imprimirlo en bloques de 10 bytes y 12 bytes
-    print("\n--- Vista preliminar (bloques de 10 bytes) ---")
-    for i in range(0, len(data), 10):
-        chunk = data[i:i+10]
-        print(f"Bloque {i//10 + 1}: {chunk.hex()} | ASCII: {''.join(chr(b) if 32 <= b <= 126 else '.' for b in chunk)}")
+    data = path.read_bytes()
+    file_size = len(data)
+
+    print("==========================================================")
+    print(f" 🔍 VOLCADO COMPLETO HEXADECIMAL: {path.name} ({file_size} bytes)")
+    print("==========================================================")
+    print("OFFSET  | BYTES (HEX)             | ASCII")
+    print("----------------------------------------------------------")
+
+    for offset in range(0, file_size, bytes_per_line):
+        chunk = data[offset : offset + bytes_per_line]
+        
+        # Representación en Hexadecimal (ej: 41 4C 46 00)
+        hex_bytes = " ".join(f"{b:02X}" for b in chunk)
+        
+        # Representación ASCII (caracteres imprimibles o punto si es un byte de control)
+        ascii_text = "".join(chr(b) if 32 <= b <= 126 else "." for b in chunk)
+        
+        # Relleno de espacios si la última línea tiene menos bytes
+        hex_padded = f"{hex_bytes:<{bytes_per_line * 3}}"
+
+        print(f"0x{offset:04X}  | {hex_padded} | {ascii_text}")
+
+    print("==========================================================\n")
+
+
+if __name__ == "__main__":
+    # Si le pasas una ruta por argumento la usa, sino busca 'hi/gberet.hi' por defecto
+    target_file = sys.argv[1] if len(sys.argv) > 1 else "hi/gberet.hi"
+    inspect_hi_file(target_file)

@@ -2,10 +2,10 @@ from readers.fbneo_reader import FBNeoReader
 
 def main():
     reader = FBNeoReader()
-    hi_path = "hi/baddudes.hi"  # Ajusta la ruta a tu archivo baddudes.hi
+    hi_path = "hi/gberet.hi"  # Ajusta la ruta a tu archivo gberet.hi
 
     try:
-        table = reader.read_table(hi_path, "baddudes")
+        table = reader.read_table(hi_path, "gberet")
 
         print("===================================")
         print(f" TABLA COMPLETA: {table.game_name}")
