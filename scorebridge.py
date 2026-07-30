@@ -1,8 +1,59 @@
 import sys
 import json
+import tkinter as tk
 from pathlib import Path
 from readers.fbneo_reader import FBNeoReader
 from iscored_client import IScoredClient
+
+
+def show_achievement_toast(title: str, message: str, is_success: bool = True, display_time_ms: int = 3500):
+    """
+    Muestra un mensaje emergente animado arriba a la derecha del escritorio
+    simulando la notificación de un logro de RetroArch.
+    """
+    try:
+        root = tk.Tk()
+        root.overrideredirect(True)           # Sin marco ni barra de ventana
+        root.wm_attributes("-topmost", True)  # Siempre por encima del resto de ventanas
+
+        # Estilos visuales HUD Arcade
+        bg_color = "#121820"
+        border_color = "#2ecc71" if is_success else "#e74c3c"
+        text_color = "#ffffff"
+        accent_color = "#2ecc71" if is_success else "#e74c3c"
+
+        frame = tk.Frame(root, bg=bg_color, highlightbackground=border_color, highlightthickness=2)
+        frame.pack(fill="both", expand=True)
+
+        lbl_title = tk.Label(frame, text=title.upper(), font=("Consolas", 10, "bold"), fg=accent_color, bg=bg_color)
+        lbl_title.pack(anchor="w", padx=12, pady=(8, 2))
+
+        lbl_msg = tk.Label(frame, text=message, font=("Consolas", 11), fg=text_color, bg=bg_color)
+        lbl_msg.pack(anchor="w", padx=12, pady=(0, 8))
+
+        root.update_idletasks()
+        width = root.winfo_width()
+        screen_width = root.winfo_screenwidth()
+
+        target_x = screen_width - width - 20
+        start_x = screen_width + 10  # Posición fuera de pantalla a la derecha
+        y = 20                       # Margen superior
+
+        root.geometry(f"+{start_x}+{y}")
+
+        # Animación de deslizado hacia la izquierda (Slide-in)
+        def animate_slide_in(current_x):
+            if current_x > target_x:
+                new_x = max(target_x, current_x - 15)
+                root.geometry(f"+{new_x}+{y}")
+                root.after(10, lambda: animate_slide_in(new_x))
+            else:
+                root.after(display_time_ms, root.destroy)
+
+        animate_slide_in(start_x)
+        root.mainloop()
+    except Exception as e:
+        print(f"[WARN] No se pudo desplegar la notificación OSD: {e}")
 
 
 def load_config(config_path="config.json") -> tuple[dict, Path]:
@@ -43,11 +94,26 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             # Envío a iScored (solo si tiene asignado un ID de juego)
             iscored_id = game_info.get("iscored_id")
             if iscored_client and iscored_id:
-                iscored_client.submit_score(
+                res = iscored_client.submit_score(
                     game_id_or_name=iscored_id,
                     player_name=best_entry.player,
                     score=best_entry.score,
                 )
+                
+                # Evaluamos el resultado para lanzar la notificación visual
+                if res and getattr(res, "status_code", 200) in (200, 201):
+                    show_achievement_toast(
+                        title="🏆 Puntuación Subida",
+                        message=f"{best_entry.player}: {best_entry.score:,} pts",
+                        is_success=True
+                    )
+                else:
+                    show_achievement_toast(
+                        title="⚠️ Error iScored",
+                        message="No se pudo subir la puntuación",
+                        is_success=False
+                    )
+
             elif not iscored_id:
                 print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
         else:
@@ -57,6 +123,11 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
 
     except Exception as e:
         print(f"Error procesando {rom_name}: {e}\n")
+        show_achievement_toast(
+            title="❌ Error ScoreBridge",
+            message=str(e),
+            is_success=False
+        )
 
 
 def main():
@@ -87,7 +158,7 @@ def main():
             "name": target_rom.lower(),
             "hi_file": f"{target_rom}.hi",
             "initials": default_initials,
-            "iscored_id": None  # Lo dejas listo para ponerle el ID de iScored cuando lo crees en su web
+            "iscored_id": None
         }
         games[target_rom] = new_game_entry
         config["games"] = games
