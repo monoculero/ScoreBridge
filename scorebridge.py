@@ -115,12 +115,16 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                     )
 
             elif not iscored_id:
+                print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
+
                 show_achievement_toast(
                     title="ℹ️ iScored",
                     message="Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.",
                     is_success=False
                 )
         else:
+            print(f"Sin registros para las iniciales '{target_initials}'")
+
             show_achievement_toast(
                 title="？ iScored",
                 message=f"Sin registros para las iniciales '{target_initials}'",
