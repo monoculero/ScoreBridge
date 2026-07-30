@@ -170,7 +170,7 @@ def main():
             "name": target_rom.lower(),
             "hi_file": f"{target_rom}.hi",
             "initials": default_initials,
-            "iscored_id": None
+            "iscored_id": ""  # Puedes dejarlo vacío o asignar un ID si lo conoces
         }
         games[target_rom] = new_game_entry
         config["games"] = games
