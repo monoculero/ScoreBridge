@@ -25,6 +25,3 @@ Instalar desde https://www.python.org/downloads/
 Abre una terminal (CMD o PowerShell) en la carpeta del proyecto e instala la librería necesaria para las peticiones web:
 
 pip install requests
-
-## 📝 Licencia
-Este proyecto se encuentra actualmente en desarrollo activo. Todos los derechos reservados. No se permite su modificación, distribución ni uso comercial sin autorización previa.
