@@ -94,25 +94,36 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             # Envío a iScored (solo si tiene asignado un ID de juego)
             iscored_id = game_info.get("iscored_id")
             if iscored_client and iscored_id:
-                res = iscored_client.submit_score(
-                    game_id_or_name=iscored_id,
-                    player_name=best_entry.player,
-                    score=best_entry.score,
-                )
+                # Comprobamos primero si supera la puntuación para dar un aviso más preciso
+                current_score = iscored_client.get_player_score_on_iscored(iscored_id, best_entry.player)
                 
-                # Evaluamos el resultado para lanzar la notificación visual
-                if res and getattr(res, "status_code", 200) in (200, 201):
+                if current_score > 0 and best_entry.score <= current_score:
+                    print(f" [Info] Puntuación inferior o igual a la existente ({best_entry.score:,} <= {current_score:,}). Descartada.")
                     show_achievement_toast(
-                        title=f"🏆 Puntuación Subida - {game_name}",
-                        message=f"{best_entry.player}: {best_entry.score:,}",
-                        is_success=True
-                    )
-                else:
-                    show_achievement_toast(
-                        title="⚠️ Error iScored",
-                        message="No se pudo subir la puntuación",
+                        title="ℹ️ Puntuación no superada",
+                        message=f"Tu marca ({best_entry.score:,}) no supera el récord en iScored.",
                         is_success=False
                     )
+                else:
+                    res = iscored_client.submit_score(
+                        game_id_or_name=iscored_id,
+                        player_name=best_entry.player,
+                        score=best_entry.score,
+                    )
+                    
+                    # Evaluamos el resultado para lanzar la notificación visual
+                    if res and getattr(res, "status_code", 200) in (200, 201):
+                        show_achievement_toast(
+                            title=f"🏆 Puntuación Subida - {game_name}",
+                            message=f"{best_entry.player}: {best_entry.score:,}",
+                            is_success=True
+                        )
+                    else:
+                        show_achievement_toast(
+                            title="⚠️ Error iScored",
+                            message="No se pudo subir la puntuación",
+                            is_success=False
+                        )
 
             elif not iscored_id:
                 print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
