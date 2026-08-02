@@ -18,7 +18,10 @@ Antes de configurar el proyecto, asegúrate de tener instalado en tu sistema:
 ### 1. Clonar o descargar el repositorio
 Coloca la carpeta del proyecto en la ruta de tu elección (por ejemplo, `C:\AttractModePlus\ScoreBridge\`).
 
-### 2. Instalar dependencias de Python
+### 2. Instalar Python
+Instalar desde https://www.python.org/downloads/ 
+
+### 3. Instalar dependencias de Python
 Abre una terminal (CMD o PowerShell) en la carpeta del proyecto e instala la librería necesaria para las peticiones web:
-```cmd
+
 pip install requests
