@@ -73,12 +73,20 @@ def save_config(config: dict, config_path: Path):
 def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_client: IScoredClient, default_initials: str, hi_folder: Path):
     hi_filename = game_info.get("hi_file", f"{rom_name}.hi")
     hi_path = hi_folder / hi_filename
-    target_initials = game_info.get("initials", default_initials)
+    
+    # 1. Obtenemos las iniciales del juego o las por defecto, y las separamos por comas
+    raw_initials = game_info.get("initials", default_initials)
+    target_initials_list = [init.strip().upper() for init in raw_initials.split(",") if init.strip()]
 
     try:
-        best_entry = reader.get_best_score_for_player(
-            str(hi_path), rom_name, target_initials
-        )
+        # 2. Buscamos el mejor registro entre todas las iniciales permitidas
+        best_entry = None
+        for target_init in target_initials_list:
+            entry = reader.get_best_score_for_player(str(hi_path), rom_name, target_init)
+            if entry:
+                # Si encontramos un registro y es mejor que el que teníamos guardado, lo actualizamos
+                if not best_entry or entry.score > best_entry.score:
+                    best_entry = entry
 
         game_name = game_info.get("name", rom_name)
         print("===================================")
@@ -86,7 +94,7 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
         print("===================================")
 
         if best_entry:
-            print(f"INICIALES BUSCADAS : {target_initials.upper()}")
+            print(f"INICIALES BUSCADAS : {', '.join(target_initials_list)}")
             print(f"JUGADOR REGISTRADO : {best_entry.player}")
             print(f"PUESTO EN TABLA    : #{best_entry.rank}")
             print(f"MEJOR PUNTUACIÓN   : {best_entry.score:,}")
@@ -94,14 +102,13 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             # Envío a iScored (solo si tiene asignado un ID de juego)
             iscored_id = game_info.get("iscored_id")
             if iscored_client and iscored_id:
-                # Comprobamos primero si supera la puntuación para dar un aviso más preciso
                 current_score = iscored_client.get_player_score_on_iscored(iscored_id, best_entry.player)
                 
                 if current_score > 0 and best_entry.score <= current_score:
                     print(f" [Info] Puntuación inferior o igual a la existente ({best_entry.score:,} <= {current_score:,}). Descartada.")
                     show_achievement_toast(
                         title="ℹ️ Puntuación no superada",
-                        message=f"Tu marca ({best_entry.score:,}) no supera el récord en iScored.",
+                        message=f"La marca de {best_entry.player} ({best_entry.score:,}) no supera el récord.",
                         is_success=False
                     )
                 else:
@@ -111,7 +118,6 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                         score=best_entry.score,
                     )
                     
-                    # Evaluamos el resultado para lanzar la notificación visual
                     if res and getattr(res, "status_code", 200) in (200, 201):
                         show_achievement_toast(
                             title=f"🏆 Puntuación Subida - {game_name}",
@@ -127,22 +133,20 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
 
             elif not iscored_id:
                 print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
-
                 show_achievement_toast(
                     title="ℹ️ iScored",
-                    message="Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.",
+                    message="Juego sin 'iscored_id' asignado.",
                     is_success=False
                 )
         else:
-            print(f"Sin registros para las iniciales '{target_initials}'")
-
+            print(f"Sin registros para las iniciales: {', '.join(target_initials_list)}")
             show_achievement_toast(
                 title="？ iScored",
-                message=f"Sin registros para las iniciales '{target_initials}'",
+                message="Sin registros para las iniciales indicadas",
                 is_success=False
             )
 
-        print("===================================\n")
+        print("================================== اجتماعات\n")
 
     except Exception as e:
         print(f"Error procesando {rom_name}: {e}\n")
@@ -151,7 +155,6 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             message=str(e),
             is_success=False
         )
-
 
 def main():
     if len(sys.argv) <= 1:
