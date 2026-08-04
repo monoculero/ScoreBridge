@@ -1,11 +1,17 @@
+from pathlib import Path
 from readers.fbneo_reader import FBNeoReader
 
 def main():
     reader = FBNeoReader()
-    hi_path = "hi/shinobi.hi"  # Ajusta la ruta a tu archivo shinobi.hi
+    
+    # CAMBIA EL NOMBRE DE LA ROM SOLO AQUÍ
+    rom_name = "eswat"
+    
+    # La ruta del archivo se genera automáticamente usando el nombre de la rom
+    hi_path = f"hi/{rom_name}.hi"
 
     try:
-        table = reader.read_table(hi_path, "shinobi")
+        table = reader.read_table(hi_path, rom_name)
 
         print("===================================")
         print(f" TABLA COMPLETA: {table.game_name}")

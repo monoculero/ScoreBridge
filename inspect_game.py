@@ -34,6 +34,5 @@ def inspect_hi_file(file_path: str, bytes_per_line: int = 8):
 
 
 if __name__ == "__main__":
-    # Si le pasas una ruta por argumento la usa, sino busca 'hi/gberet.hi' por defecto
-    target_file = sys.argv[1] if len(sys.argv) > 1 else "hi/gberet.hi"
+    target_file = sys.argv[1] if len(sys.argv) > 1 else "hi/eswat.hi"
     inspect_hi_file(target_file)
