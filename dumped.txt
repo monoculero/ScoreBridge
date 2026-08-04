@@ -1,0 +1,68 @@
+============================================================
+CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
+============================================================
+
+1. CAPCOM (Z80 / Clásicos)
+   - 1942
+   - Black Tiger
+   - Commando (variantes: commando, commandou)
+   - Ghost'n Goblins / Makaimura
+   - Gun.Smoke
+   
+
+2. GAELCO
+   - Big Karnak
+
+3. CAPCOM CPS (Play System)
+   - 3 Wonders
+   - Cadillacs and Dinosaurs
+   - Final Fight
+   - Ghouls And Goblins
+   - Street Fighter II 
+
+4. SEGA (System 16 / System 18)
+   - Altered Beast
+   - E-SWAT
+   - Golden Axe
+   - Shinobi
+
+5. DATA EAST
+   - Bad Dudes vs. DragonNinja
+   - Captain America and The Defendants / The Avengers
+   - RoboCop
+   - Sly Spy
+
+6. IREM
+   - Kung-Fu Master / Spartan X
+   - Hammerin' Harry
+
+7. KONAMI
+   - Fast Lane (fastlane)
+   - Green Beret
+   - GI. JOE
+   - Haunted Castle
+   - Kicker
+   - Sunset Riders
+   - Yie Ar Kung-Fu
+
+8. TAD CORPORATION
+   - Blood Bros.
+   - Cabal (cabal)
+   - Toki (toki)
+
+9. TAITO
+   - Dead Connection
+
+10. JALECO
+   - City Connection
+
+11. NAMCO
+   - Galaxian
+
+12. TECMO
+   - Ninja Gaiden / Shadow Warriors
+
+13. NICHIBUTSU
+   - Kid no Hore Hore Daisakusen / Hore Kid
+
+============================================================

@@ -17,4 +17,4 @@ def debug_hi_file(file_path):
         print(f"{i:04X}: {hex_str}  | {ascii_str}")
 
 # Cambia esto por la ruta real de tu fichero .hi de 3wonders si lo necesitas
-debug_hi_file("hi/yiear.hi")
+debug_hi_file("hi/horekid.hi")

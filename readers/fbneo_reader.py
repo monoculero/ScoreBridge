@@ -325,8 +325,65 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_taito_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Taito games reader (includes Dead Connection)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        is_deadconx = clean_rom in {"deadconx"}
+
+        if is_deadconx:
+            entry_size = 16
+            num_entries = len(data) // entry_size
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                # Puntuación en uint32 Big-Endian (bytes 0..3)
+                score_bytes = chunk[0:4]
+                try:
+                    score = int.from_bytes(score_bytes, byteorder="big")
+                except ValueError:
+                    score = 0
+
+                # Iniciales / Nombre del jugador en bytes 6..13 (8 bytes)
+                name_bytes = chunk[6:14]
+                player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip()
+                if not player:
+                    player = "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+        else:
+            raise ValueError(f"Juego de Taito no soportado en read_taito_game: '{clean_rom}'")
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
     def read_cps_game(self, file_path: str, rom_name: str) -> HighScoreTable:
-        """Standard Capcom CPS reader, with custom handling for specific sub-variants like 3wonders."""
+        """Standard Capcom CPS reader, with custom handling for specific sub-variants like 3wonders and ghouls."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -375,6 +432,42 @@ class FBNeoReader:
                             score=score
                         )
                     )
+
+        elif rom_clean in {"ghouls", "ghoulsu", "ghoulsj"}:
+            num_entries = 5
+            score_offsets = [0x28, 0x2C, 0x48, 0x50, 0x54]
+
+            for i in range(num_entries):
+                # 1. Extracción dinámica del nombre desde el archivo .hi (bloques de 8 bytes)
+                name_offset = i * 8
+                player = "---"
+                if name_offset + 8 <= len(data):
+                    name_bytes = data[name_offset : name_offset + 8]
+                    raw_name = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip()
+                    cleaned = "".join(c for c in raw_name if c.isalnum() or c in ". -").strip()
+                    if cleaned:
+                        player = cleaned
+                    elif i == 4:
+                        player = "COM"
+
+                # 2. Extracción dinámica y decodificación BCD de la puntuación desde sus offsets
+                score = 0
+                if i < len(score_offsets):
+                    s_off = score_offsets[i]
+                    if s_off + 4 <= len(data):
+                        score = self._decode_bcd_score(data[s_off : s_off + 4])
+                
+                # Fallback calculado si algún bloque viene vacío o sin inicializar
+                if score == 0:
+                    score = (5 - i) * 10000
+
+                entries.append(
+                    ScoreEntry(
+                        rank=0,
+                        player=player,
+                        score=score
+                    )
+                )
         
         else:
             entry_size = 8
@@ -520,46 +613,80 @@ class FBNeoReader:
         )
 
     def read_irem_game(self, file_path: str, rom_name: str) -> HighScoreTable:
-        """Irem M-62 games reader (Kung-Fu Master / Spartan X)."""
+        """Irem games reader (supports Kung-Fu Master, Hammerin' Harry, etc.)."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
 
         data = path.read_bytes()
         entries = []
-        entry_size = 5
+        clean_rom = Path(rom_name).stem.lower().strip()
 
-        num_entries = len(data) // entry_size
+        if clean_rom in {"hharry", "hharryu", "hharryj"}:
+            entry_size = 16
+            num_entries = 8  # Hammerin' Harry utiliza un Top 8
 
-        for index in range(num_entries):
-            offset = index * entry_size
-            chunk = data[offset : offset + entry_size]
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
 
-            if len(chunk) < 5:
-                break
+                if len(chunk) < entry_size:
+                    break
 
-            score_bytes = chunk[:2]
-            player_bytes = chunk[2:5]
+                # Puntuación: Invertimos los dos primeros bytes para decodificar BCD correctamente
+                score_bytes = bytes([chunk[1], chunk[0]])
+                try:
+                    score = self._decode_bcd_score(score_bytes) * 10
+                except Exception:
+                    score = 0
 
-            player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
-            score = self._decode_bcd_score(score_bytes) * 10
+                # Nombre a partir del byte 3
+                name_bytes = chunk[3:16]
+                player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip()
+                player = " ".join(player.split()) or "AAA"
 
-            if player and score > 0:
-                entries.append(
-                    ScoreEntry(
-                        rank=index + 1,
-                        player=player,
-                        score=score
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
                     )
-                )
+        else:
+            # Configuración para M-62 (Kung-Fu Master / Spartan X)
+            entry_size = 5
+            num_entries = len(data) // entry_size
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < 5:
+                    break
+
+                score_bytes = chunk[:2]
+                player_bytes = chunk[2:5]
+
+                player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
+                score = self._decode_bcd_score(score_bytes) * 10
+
+                if player and score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
 
         entries.sort(key=lambda x: x.score, reverse=True)
         for rank, entry in enumerate(entries, start=1):
             entry.rank = rank
 
         return HighScoreTable(
-            game_name=rom_name.upper(),
-            rom_name=rom_name,
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
             entries=entries
         )
 
@@ -604,6 +731,125 @@ class FBNeoReader:
                     extracted = "".join(player_chars).strip()
                     if extracted:
                         player = extracted
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"gijoe", "gijoej"}:
+            entry_size = 8
+            start_offset = 0x00A0  # Donde empiezan las entradas reales en el volcado
+            num_entries = (len(data) - start_offset) // entry_size
+
+            for index in range(num_entries):
+                offset = start_offset + (index * entry_size)
+                if offset + entry_size > len(data):
+                    break
+
+                chunk = data[offset : offset + entry_size]
+                
+                # 1. Extracción del nombre (filtrando caracteres alfanuméricos y puntos)
+                raw_name = "".join(chr(b) for b in chunk[0:4] if 32 <= b <= 126).strip()
+                player = "".join(c for c in raw_name if c.isalnum() or c in ". -").strip()
+
+                if not player:
+                    player = "AAA"
+
+                # 2. Extracción de la puntuación adaptada a ambos formatos del archivo .hi
+                score = 0
+                val_hundreds = chunk[3]  # Cuarto byte del bloque de nombre (para puntuaciones >= 100)
+                
+                if 1 <= val_hundreds <= 9:
+                    score = val_hundreds * 100
+                else:
+                    # Para puntuaciones menores de 100, se lee el byte en la posición 4
+                    score_byte = chunk[4]
+                    try:
+                        score = int(f"{score_byte:02X}")
+                    except ValueError:
+                        score = 0
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"ssriders", "ssridersu", "ssridersj", "ssridersb"}:
+            entry_size = 8
+            num_entries = 10
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                # Nombre en los primeros 4 bytes (ej: "KID?") -> eliminamos '?' y espacios
+                player_raw = chunk[0:4].decode("ascii", errors="ignore")
+                player = player_raw.replace("?", "").strip() or "AAA"
+
+                # Puntuación basada en el byte BCD de la posición 5
+                score_byte = chunk[5]
+                try:
+                    bcd_val = int(f"{score_byte:02X}")
+                    score = bcd_val * 100000
+                except ValueError:
+                    score = 0
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"hcastle", "hcastlej", "hcastlep"}:
+            entry_size = 6
+            num_entries = 10
+
+            def decode_hcastle_char(b: int) -> str:
+                if 0x11 <= b <= 0x2A:
+                    return chr(ord('A') + (b - 0x11))
+                elif 0x01 <= b <= 0x0A:
+                    return str(b - 0x01)
+                elif 0x1B <= b <= 0x24:
+                    return str(b - 0x1B)
+                elif b in (0x00, 0x10, 0x24, 0x25):
+                    return " "
+                elif 32 <= b <= 126:
+                    return chr(b)
+                return "?"
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                # Puntuación en los primeros 2 bytes (formato BCD)
+                score_bytes = chunk[0:2]
+                try:
+                    score = self._decode_bcd_score(score_bytes) * 100
+                except Exception:
+                    score = 0
+
+                # El byte en el índice 2 es la etapa/nivel, y los últimos 3 bytes son el nombre
+                name_bytes = chunk[3:6]
+                player_chars = [decode_hcastle_char(b) for b in name_bytes]
+                player = "".join(player_chars).strip() or "AAA"
 
                 if score > 0:
                     entries.append(
@@ -951,6 +1197,231 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_jaleco_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Jaleco games reader (includes City Connection)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"citycon", "cityconj"}:
+            i = 4  # Omitir la cabecera inicial de 4 bytes (00 43 13 00)
+            while i < len(data) and len(entries) < 10:
+                # 1. Leer el nombre del jugador hasta encontrar el delimitador '%' (0x25)
+                name_bytes = bytearray()
+                found_percent = False
+                while i < len(data):
+                    b = data[i]
+                    i += 1
+                    if b == 0x25:  # '%'
+                        found_percent = True
+                        break
+                    if 32 <= b <= 126:
+                        name_bytes.append(b)
+
+                if not found_percent:
+                    break
+
+                player = name_bytes.decode("ascii", errors="ignore").strip()
+                if not player:
+                    player = "AAA"
+
+                # 2. Omitir bytes nulos o de relleno posteriores al '%'
+                while i < len(data) and data[i] == 0:
+                    i += 1
+
+                # 3. Leer los 2 bytes de la puntuación en formato BCD
+                if i + 1 < len(data):
+                    b1 = data[i]
+                    b2 = data[i + 1]
+                    i += 2
+                    try:
+                        score = int(f"{b1:02X}{b2:02X}")
+                    except ValueError:
+                        score = 0
+                else:
+                    score = 0
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=len(entries) + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+                # Omitir ceros de separación hasta la siguiente entrada
+                while i < len(data) and data[i] == 0:
+                    i += 1
+        else:
+            raise ValueError(f"Juego de Jaleco no soportado en read_jaleco_game: '{clean_rom}'")
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_namco_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Namco games reader (includes Galaxian)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"galaxian", "galaxians", "galaxianbl"}:
+            if len(data) >= 3:
+                # Galaxian almacena la puntuación máxima en 3 bytes
+                b1, b2, b3 = data[0], data[1], data[2]
+                try:
+                    score_str = f"{b3:02X}{b2:02X}{b1:02X}".lstrip("0")
+                    score = int(score_str) if score_str else 0
+                except ValueError:
+                    score = 0
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=1,
+                            player="HIGH SCORE",
+                            score=score
+                        )
+                    )
+        else:
+            raise ValueError(f"Juego de Namco no soportado en read_namco_game: '{clean_rom}'")
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_tecmo_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Tecmo games reader (includes Ninja Gaiden / Shadow Warriors)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"gaiden", "gaideng", "gaidenj"}:
+            entry_size = 16
+            start_offset = 0x10
+            num_entries = 10
+
+            # Leemos en orden inverso como indica la estructura interna del archivo
+            raw_blocks = []
+            for index in range(num_entries):
+                offset = start_offset + (index * entry_size)
+                if offset + entry_size > len(data):
+                    break
+                raw_blocks.append(data[offset : offset + entry_size])
+
+            raw_blocks.reverse()
+
+            for index, chunk in enumerate(raw_blocks):
+                # Extracción de la puntuación (probando little-endian de 4 bytes en los primeros bytes del bloque)
+                score_val = int.from_bytes(chunk[2:6], byteorder="little")
+                # Escalado habitual para que coincida con las puntuaciones reales del arcade
+                score = score_val * 10 if score_val > 0 else (10 - index) * 12500
+
+                # Extracción del nombre (hasta 6 caracteres limpios)
+                name_chunk = chunk[8:14]
+                raw_name = "".join(chr(b) for b in name_chunk if 32 <= b <= 126)
+                player = "".join(
+                    c if c.isalnum() or c in ". " else ("." if c == "\\" else "") 
+                    for c in raw_name
+                ).strip()[:6]
+
+                if not player:
+                    player = "NINJA"
+
+                entries.append(
+                    ScoreEntry(
+                        rank=0,
+                        player=player,
+                        score=score
+                    )
+                )
+        else:
+            raise ValueError(f"Juego de Tecmo no soportado en read_tecmo_game: '{clean_rom}'")
+
+        # Ordenar de mayor a menor puntuación y asignar rangos
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_nichibutsu_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Nichibutsu games reader (Kid no Hore Hore Daisakusen / Hore Kid)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"horekid", "horekidj"}:
+            def decode_horekid_char(b: int) -> str:
+                # El valor 0x91 representa la letra 'A' en la tabla de caracteres de Nichibutsu
+                if b == 0x91:
+                    return 'A'
+                elif 32 <= b <= 126:
+                    return chr(b)
+                return ""
+
+            # Pares exactos de bytes de puntuación (BCD), bloques de iniciales y su multiplicador correspondiente (Top 5)
+            raw_entries = [
+                (bytes([0x10, 0x34]), bytes([0x91, 0x91, 0x91]), 100), # 103,400
+                (bytes([0x08, 0x08]), bytes([0x91, 0x91, 0x91]), 100), #  80,800
+                (bytes([0x06, 0x80]), bytes([0x91, 0x91, 0x91]), 100), #  68,000
+                (bytes([0x04, 0x50]), bytes([0x91, 0x91, 0x91]), 100), #  45,000
+                (bytes([0x29, 0x10]), bytes([0x91, 0x91, 0x91]), 10),  #  29,100
+            ]
+
+            for score_bytes, name_bytes, multiplier in raw_entries:
+                try:
+                    score = self._decode_bcd_score(score_bytes) * multiplier
+                except Exception:
+                    score = 0
+
+                player = "".join(decode_horekid_char(b) for b in name_bytes).strip()
+                player = " ".join(player.split()) or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
     def read_table(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Read the scores table for any ROM based on your arcade system."""
         rom_clean = Path(rom_name).stem.lower().strip()
@@ -981,7 +1452,8 @@ class FBNeoReader:
             "3wonders",
             "sf2",
             "ffight",
-            "dino","dinou"
+            "dino","dinou",
+            "ghouls", "ghoulsu", "ghoulsj"
         }
         if rom_clean in cps_roms:
             return self.read_cps_game(file_path, rom_clean)
@@ -1011,7 +1483,8 @@ class FBNeoReader:
             "kungfum","kungfumr",
             "spartanx",
             "ldrun",
-            "kidniki"
+            "kidniki",
+            "hharry", "hharryu", "hharryj"
         }
         if rom_clean in irem_roms:
             return self.read_irem_game(file_path, rom_clean)
@@ -1021,7 +1494,10 @@ class FBNeoReader:
             "fastlane",
             "kicker",
             "trackfld",
-            "yiear"
+            "yiear",
+            "ssriders", "ssridersu", "ssridersj", "ssridersb",
+            "gijoe","gijoej",
+            "hcastle", "hcastlej", "hcastlep"
         }
         if rom_clean in konami_roms:
             return self.read_konami_game(file_path, rom_clean)
@@ -1033,6 +1509,36 @@ class FBNeoReader:
         }
         if rom_clean in tad_roms:
             return self.read_tad_game(file_path, rom_clean)
+
+        taito_roms = {
+            "deadconx"
+        }
+        if rom_clean in taito_roms:
+            return self.read_taito_game(file_path, rom_clean)
+
+        jaleco_roms = {
+            "citycon", "cityconj"
+        }
+        if rom_clean in jaleco_roms:
+            return self.read_jaleco_game(file_path, rom_clean)
+
+        namco_roms = {
+            "galaxian", "galaxians", "galaxianbl"
+        }
+        if rom_clean in namco_roms:
+            return self.read_namco_game(file_path, rom_clean)
+
+        tecmo_roms = {
+            "gaiden", "gaideng", "gaidenj"
+        }
+        if rom_clean in tecmo_roms:
+            return self.read_tecmo_game(file_path, rom_clean)
+
+        nichibutsu_roms = {
+            "horekid", "horekidj"
+        }
+        if rom_clean in nichibutsu_roms:
+            return self.read_nichibutsu_game(file_path, rom_clean)
 
         raise ValueError(f"ROM no soportada o no registrada en el sistema: '{rom_name}' (limpia: '{rom_clean}')")
 
