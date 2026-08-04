@@ -5,7 +5,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 1. CAPCOM (Z80 / Clásicos)
    - 1942
    - Black Tiger
-   - Commando (variantes: commando, commandou)
+   - Commando
    - Ghost'n Goblins / Makaimura
    - Gun.Smoke
    
@@ -36,7 +36,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Hammerin' Harry
 
 7. KONAMI
-   - Fast Lane (fastlane)
+   - Fast Lane
    - Green Beret
    - GI. JOE
    - Haunted Castle
@@ -46,8 +46,8 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 
 8. TAD CORPORATION
    - Blood Bros.
-   - Cabal (cabal)
-   - Toki (toki)
+   - Cabal
+   - Toki
 
 9. TAITO
    - Dead Connection
