@@ -24,3 +24,6 @@ hi/
 # Archivos de configuración de IDEs
 .vscode/
 .idea/
+
+# Ficheros QR
+qrcodes/

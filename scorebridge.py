@@ -1,5 +1,8 @@
 import sys
 import json
+import re
+import ssl
+import urllib.request
 import tkinter as tk
 from pathlib import Path
 from readers.fbneo_reader import FBNeoReader
@@ -68,6 +71,71 @@ def save_config(config: dict, config_path: Path):
     """Guarda los cambios de vuelta en el config.json manteniendo un formato bonito."""
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def fetch_iscored_id_from_gameroom(gameroom: str, game_name: str, rom_name: str) -> str:
+    """
+    Consulta el HTML de la página pública del Gameroom en iScored e intenta
+    extraer el `score_id` / `game_id` haciendo coincidir el nombre o la ROM.
+    """
+    if not gameroom:
+        return ""
+
+    url = f"https://iscored.info/?user={gameroom}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
+            html = response.read().decode("utf-8", errors="ignore")
+
+        clean_game = re.sub(r'[^a-zA-Z0-9]', '', game_name).lower()
+        clean_rom = re.sub(r'[^a-zA-Z0-9]', '', rom_name).lower()
+
+        # 1. Búsqueda en bloques de objetos JavaScript ({ ... "name": "Bad Dudes", "id": "103301" ... })
+        js_objects = re.findall(r'\{[^\}]+\}', html)
+        for obj_str in js_objects:
+            clean_obj = re.sub(r'[^a-zA-Z0-9]', '', obj_str).lower()
+            if clean_game in clean_obj or clean_rom in clean_obj:
+                # Extrae el ID asociado al objeto JS
+                id_match = re.search(r'["\']?(?:id|game_id|gameId)["\']?\s*:\s*["\']?([0-9a-zA-Z_-]+)', obj_str, re.IGNORECASE)
+                if id_match:
+                    return id_match.group(1)
+
+        # 2. Búsqueda en imágenes con atributos alt / title dentro de contenedores div.game (id="a103301")
+        game_divs = re.findall(
+            r'<div[^>]+id=["\']a(\d+)["\'][^>]*>.*?</div>',
+            html,
+            re.IGNORECASE | re.DOTALL
+        )
+        for g_id in game_divs:
+            # Si el bloque del div contiene el nombre del juego o la ROM en texto/atributos
+            block_match = re.search(rf'id=["\']a{g_id}["\'].*?</div></div></div>', html, re.DOTALL)
+            if block_match:
+                block_content = block_match.group(0)
+                clean_block = re.sub(r'[^a-zA-Z0-9]', '', block_content).lower()
+                if clean_game in clean_block or clean_rom in clean_block:
+                    return g_id
+
+        # 3. Búsqueda general de enlaces HTML con parámetros de ID
+        matches = re.findall(
+            r'<a[^>]+href=["\'][^"\']*(?:game|score_id|id)=([a-zA-Z0-9_-]+)["\'][^>]*>(.*?)</a>',
+            html,
+            re.IGNORECASE | re.DOTALL
+        )
+        for g_id, text in matches:
+            clean_text = re.sub(r'<[^>]+>', '', text)
+            clean_text = re.sub(r'[^a-zA-Z0-9]', '', clean_text).lower()
+            if clean_game in clean_text or clean_rom in clean_text or clean_text in clean_game:
+                return g_id
+
+    except Exception as e:
+        print(f" [Warn] No se pudo resolver automáticamente el ID desde iScored: {e}")
+
+    return ""
 
 
 def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_client: IScoredClient, default_initials: str, hi_folder: Path):
@@ -146,7 +214,7 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                 is_success=False
             )
 
-        print("================================== اجتماعات\n")
+        print("===================================\n")
 
     except Exception as e:
         print(f"Error procesando {rom_name}: {e}\n")
@@ -155,6 +223,7 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             message=str(e),
             is_success=False
         )
+
 
 def main():
     if len(sys.argv) <= 1:
@@ -177,16 +246,35 @@ def main():
 
     target_rom = sys.argv[1].lower().strip()
 
-    # Si la ROM no está en config.json, la creamos y guardamos el archivo
+    # 1. Si la ROM no existe en config.json, la creamos
+    config_updated = False
     if target_rom not in games:
         print(f" [Auto-discovery] Nueva ROM detectada: '{target_rom}'. Añadiendo a config.json...")
-        new_game_entry = {
+        games[target_rom] = {
             "name": target_rom.lower(),
             "hi_file": f"{target_rom}.hi",
             "initials": default_initials,
-            "iscored_id": ""  # Puedes dejarlo vacío o asignar un ID si lo conoces
+            "iscored_id": ""
         }
-        games[target_rom] = new_game_entry
+        config_updated = True
+
+    game_info = games[target_rom]
+
+    # 2. Si iscored_id está vacío y tenemos activado gameroom, intentamos rasparlo de la web
+    if not game_info.get("iscored_id") and gameroom:
+        game_name = game_info.get("name", target_rom)
+        print(f" [Auto-discovery] Buscando 'iscored_id' para '{game_name}' en iScored ({gameroom})...")
+        found_id = fetch_iscored_id_from_gameroom(gameroom, game_name, target_rom)
+
+        if found_id:
+            print(f" [Auto-discovery] ¡ID encontrado!: '{found_id}'")
+            game_info["iscored_id"] = found_id
+            config_updated = True
+        else:
+            print(" [Auto-discovery] No se encontró el ID en iScored. Se mantendrá vacío en config.json.")
+
+    # Guardamos config.json si hubo cambios (por ROM nueva o por ID encontrado)
+    if config_updated:
         config["games"] = games
         save_config(config, config_path)
 
