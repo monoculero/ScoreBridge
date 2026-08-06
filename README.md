@@ -1,4 +1,4 @@
-#🕹️ScoreBridge Arcade Sync
+## 🕹️ScoreBridge Arcade Sync
 
 Automation system to capture high scores (.hi) from emulators in RetroArch (such as FinalBurn Neo), process them using a Python script and automatically sync them with **iScored**, seamlessly integrated with frontends such as **Attract-Mode Plus**.
 After selecting a game in Attract Mode Plus (AM+) and launching it in RetroArch, at the end of the game, ScoreBridge will look for your initials in the .hi file of your scores, and will only go up if it is higher than the one you previously had in iSocred, so it only saves a single score (the highest LoL)
