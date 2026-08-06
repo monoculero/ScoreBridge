@@ -1,8 +1,7 @@
 import sys
 import json
 import re
-import ssl
-import urllib.request
+import cv2
 import tkinter as tk
 from pathlib import Path
 from readers.fbneo_reader import FBNeoReader
@@ -19,7 +18,6 @@ def show_achievement_toast(title: str, message: str, is_success: bool = True, di
         root.overrideredirect(True)           # Sin marco ni barra de ventana
         root.wm_attributes("-topmost", True)  # Siempre por encima del resto de ventanas
 
-        # Estilos visuales HUD Arcade
         bg_color = "#121820"
         border_color = "#2ecc71" if is_success else "#e74c3c"
         text_color = "#ffffff"
@@ -44,7 +42,6 @@ def show_achievement_toast(title: str, message: str, is_success: bool = True, di
 
         root.geometry(f"+{start_x}+{y}")
 
-        # Animación de deslizado hacia la izquierda (Slide-in)
         def animate_slide_in(current_x):
             if current_x > target_x:
                 new_x = max(target_x, current_x - 15)
@@ -73,67 +70,43 @@ def save_config(config: dict, config_path: Path):
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 
-def fetch_iscored_id_from_gameroom(gameroom: str, game_name: str, rom_name: str) -> str:
+def find_id_in_qr_folder(rom_name: str, game_name: str, qr_folder_path: Path = Path("qrcodes")) -> str:
     """
-    Consulta el HTML de la página pública del Gameroom en iScored e intenta
-    extraer el `score_id` / `game_id` haciendo coincidir el nombre o la ROM.
+    Busca en la carpeta 'qrcodes/' una imagen que coincida con la ROM o nombre del juego,
+    decodifica el QR y devuelve el iscored_id.
     """
-    if not gameroom:
+    if not qr_folder_path.exists():
         return ""
 
-    url = f"https://iscored.info/?user={gameroom}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+    clean_rom = re.sub(r'[^a-zA-Z0-9]', '', rom_name).lower()
+    clean_game = re.sub(r'[^a-zA-Z0-9]', '', game_name).lower()
 
-        with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
-            html = response.read().decode("utf-8", errors="ignore")
+    detector = cv2.QRCodeDetector()
 
-        clean_game = re.sub(r'[^a-zA-Z0-9]', '', game_name).lower()
-        clean_rom = re.sub(r'[^a-zA-Z0-9]', '', rom_name).lower()
+    for qr_file in qr_folder_path.glob("*.*"):
+        if qr_file.suffix.lower() not in [".png", ".jpg", ".jpeg", ".bmp"]:
+            continue
 
-        # 1. Búsqueda en bloques de objetos JavaScript ({ ... "name": "Bad Dudes", "id": "103301" ... })
-        js_objects = re.findall(r'\{[^\}]+\}', html)
-        for obj_str in js_objects:
-            clean_obj = re.sub(r'[^a-zA-Z0-9]', '', obj_str).lower()
-            if clean_game in clean_obj or clean_rom in clean_obj:
-                # Extrae el ID asociado al objeto JS
-                id_match = re.search(r'["\']?(?:id|game_id|gameId)["\']?\s*:\s*["\']?([0-9a-zA-Z_-]+)', obj_str, re.IGNORECASE)
-                if id_match:
-                    return id_match.group(1)
+        clean_filename = re.sub(r'[^a-zA-Z0-9]', '', qr_file.stem).lower()
 
-        # 2. Búsqueda en imágenes con atributos alt / title dentro de contenedores div.game (id="a103301")
-        game_divs = re.findall(
-            r'<div[^>]+id=["\']a(\d+)["\'][^>]*>.*?</div>',
-            html,
-            re.IGNORECASE | re.DOTALL
-        )
-        for g_id in game_divs:
-            # Si el bloque del div contiene el nombre del juego o la ROM en texto/atributos
-            block_match = re.search(rf'id=["\']a{g_id}["\'].*?</div></div></div>', html, re.DOTALL)
-            if block_match:
-                block_content = block_match.group(0)
-                clean_block = re.sub(r'[^a-zA-Z0-9]', '', block_content).lower()
-                if clean_game in clean_block or clean_rom in clean_block:
-                    return g_id
+        # Comprobar coincidencia con la ROM o el nombre
+        if (clean_filename == clean_rom or 
+            clean_filename == clean_game or 
+            clean_filename in clean_game or 
+            clean_game in clean_filename):
 
-        # 3. Búsqueda general de enlaces HTML con parámetros de ID
-        matches = re.findall(
-            r'<a[^>]+href=["\'][^"\']*(?:game|score_id|id)=([a-zA-Z0-9_-]+)["\'][^>]*>(.*?)</a>',
-            html,
-            re.IGNORECASE | re.DOTALL
-        )
-        for g_id, text in matches:
-            clean_text = re.sub(r'<[^>]+>', '', text)
-            clean_text = re.sub(r'[^a-zA-Z0-9]', '', clean_text).lower()
-            if clean_game in clean_text or clean_rom in clean_text or clean_text in clean_game:
-                return g_id
+            img = cv2.imread(str(qr_file))
+            if img is None:
+                continue
 
-    except Exception as e:
-        print(f" [Warn] No se pudo resolver automáticamente el ID desde iScored: {e}")
+            decoded_text, _, _ = detector.detectAndDecode(img)
+            if decoded_text:
+                match = re.search(r'(?:game|score_id|id)=([a-zA-Z0-9_-]+)', decoded_text, re.IGNORECASE)
+                if match:
+                    return match.group(1)
+                num_match = re.search(r'/(\d{5,7})/?$', decoded_text)
+                if num_match:
+                    return num_match.group(1)
 
     return ""
 
@@ -142,17 +115,14 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
     hi_filename = game_info.get("hi_file", f"{rom_name}.hi")
     hi_path = hi_folder / hi_filename
     
-    # 1. Obtenemos las iniciales del juego o las por defecto, y las separamos por comas
     raw_initials = game_info.get("initials", default_initials)
     target_initials_list = [init.strip().upper() for init in raw_initials.split(",") if init.strip()]
 
     try:
-        # 2. Buscamos el mejor registro entre todas las iniciales permitidas
         best_entry = None
         for target_init in target_initials_list:
             entry = reader.get_best_score_for_player(str(hi_path), rom_name, target_init)
             if entry:
-                # Si encontramos un registro y es mejor que el que teníamos guardado, lo actualizamos
                 if not best_entry or entry.score > best_entry.score:
                     best_entry = entry
 
@@ -167,7 +137,6 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             print(f"PUESTO EN TABLA    : #{best_entry.rank}")
             print(f"MEJOR PUNTUACIÓN   : {best_entry.score:,}")
 
-            # Envío a iScored (solo si tiene asignado un ID de juego)
             iscored_id = game_info.get("iscored_id")
             if iscored_client and iscored_id:
                 current_score = iscored_client.get_player_score_on_iscored(iscored_id, best_entry.player)
@@ -236,7 +205,6 @@ def main():
     default_initials = config.get("default_initials", "ALF")
     hi_folder = Path(config.get("hi_folder", "hi"))
 
-    # Configuración iScored
     iscored_cfg = config.get("iscored", {})
     iscored_enabled = iscored_cfg.get("enabled", False)
     gameroom = iscored_cfg.get("gameroom", "")
@@ -246,8 +214,9 @@ def main():
 
     target_rom = sys.argv[1].lower().strip()
 
-    # 1. Si la ROM no existe en config.json, la creamos
     config_updated = False
+
+    # 1. Si la ROM no existe en config.json, la creamos
     if target_rom not in games:
         print(f" [Auto-discovery] Nueva ROM detectada: '{target_rom}'. Añadiendo a config.json...")
         games[target_rom] = {
@@ -260,25 +229,25 @@ def main():
 
     game_info = games[target_rom]
 
-    # 2. Si iscored_id está vacío y tenemos activado gameroom, intentamos rasparlo de la web
-    if not game_info.get("iscored_id") and gameroom:
+    # 2. Si iscored_id está vacío, buscamos la imagen QR en la carpeta 'qrcodes/'
+    if not game_info.get("iscored_id"):
         game_name = game_info.get("name", target_rom)
-        print(f" [Auto-discovery] Buscando 'iscored_id' para '{game_name}' en iScored ({gameroom})...")
-        found_id = fetch_iscored_id_from_gameroom(gameroom, game_name, target_rom)
+        print(f" [Auto-discovery] Buscando código QR local para '{game_name}' ({target_rom})...")
+        found_id = find_id_in_qr_folder(target_rom, game_name, Path("qrcodes"))
 
         if found_id:
-            print(f" [Auto-discovery] ¡ID encontrado!: '{found_id}'")
+            print(f" [Auto-discovery] ¡ID obtenido desde el QR local!: '{found_id}'")
             game_info["iscored_id"] = found_id
             config_updated = True
         else:
-            print(" [Auto-discovery] No se encontró el ID en iScored. Se mantendrá vacío en config.json.")
+            print(" [Auto-discovery] No se encontró una imagen QR en 'qrcodes/'. El ID se mantendrá vacío.")
 
-    # Guardamos config.json si hubo cambios (por ROM nueva o por ID encontrado)
+    # Guardar config.json si se añadió la ROM o el ID
     if config_updated:
         config["games"] = games
         save_config(config, config_path)
 
-    # Procesar el juego normalmente
+    # 3. Procesar y subir puntuación
     process_game(target_rom, games[target_rom], reader, iscored_client, default_initials, hi_folder)
 
 

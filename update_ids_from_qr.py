@@ -10,15 +10,14 @@ def extract_id_from_qr_url(url: str) -> str | None:
     match = re.search(r'(?:game|score_id|id)=([a-zA-Z0-9_-]+)', url, re.IGNORECASE)
     if match:
         return match.group(1)
-    # Si la URL termina directamente en un ID numérico de 5 a 7 dígitos
     num_match = re.search(r'/(\d{5,7})/?$', url)
     return num_match.group(1) if num_match else None
 
 
 def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
     """
-    Lee todas las imágenes QR de la carpeta especificada, decodifica el ID de iScored
-    y lo asigna al juego correspondiente en config.json basándose en el nombre de archivo.
+    Lee las imágenes QR de la carpeta especificada y asigna el ID a config.json
+    ÚNICAMENTE para aquellos juegos cuyo 'iscored_id' esté vacío.
     """
     config, config_path = load_config("config.json")
     games = config.get("games", {})
@@ -57,21 +56,29 @@ def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
             print(f" ⚠️ QR decodificado sin ID reconocible ({decoded_text}) en: {qr_file.name}")
             continue
 
-        print(f"📷 Imagen: '{qr_file.name}' -> ID: {score_id}")
-
-        # Emparejar con los juegos definidos en config.json
         matched = False
         for rom_name, game_info in games.items():
             game_name = game_info.get("name", rom_name)
             clean_game = re.sub(r'[^a-zA-Z0-9]', '', game_name).lower()
             clean_rom = re.sub(r'[^a-zA-Z0-9]', '', rom_name).lower()
 
-            # Comprobar si el nombre del archivo QR coincide con el nombre o ROM del config
+            # Comprobar coincidencia de nombre de archivo con la ROM o el nombre del juego
             if (clean_filename == clean_game or 
                 clean_filename == clean_rom or 
                 clean_filename in clean_game or 
                 clean_game in clean_filename):
                 
+                existing_id = game_info.get("iscored_id")
+                
+                # Si ya tiene un ID asignado, se omite
+                if existing_id:
+                    print(f"📷 Imagen: '{qr_file.name}'")
+                    print(f"   └─ ⏭️ Omitido: ROM '{rom_name}' ({game_name}) ya tiene ID ('{existing_id}')")
+                    matched = True
+                    break
+
+                # Si está vacío, asigna el nuevo ID
+                print(f"📷 Imagen: '{qr_file.name}' -> ID: {score_id}")
                 game_info["iscored_id"] = score_id
                 print(f"   └─ ✅ Asignado a ROM '{rom_name}' ({game_name})")
                 updated_count += 1
@@ -79,15 +86,15 @@ def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
                 break
 
         if not matched:
+            print(f"📷 Imagen: '{qr_file.name}'")
             print(f"   └─ ❓ Sin coincidencia en config.json para el archivo '{raw_filename}'")
 
     if updated_count > 0:
         save_config(config, config_path)
-        print(f"\n🎉 ¡Proceso completado! Se actualizaron {updated_count} IDs en config.json.")
+        print(f"\n🎉 ¡Proceso completado! Se rellenaron {updated_count} IDs vacíos en config.json.")
     else:
-        print("\n⚠️ No se realizaron cambios en config.json.")
+        print("\n⚠️ No se encontraron IDs vacíos para actualizar en config.json.")
 
 
 if __name__ == "__main__":
-    # Nombre de la carpeta donde descomprimas los QR de iScored
     update_config_from_qrcodes("qrcodes")
