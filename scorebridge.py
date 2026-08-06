@@ -2,26 +2,28 @@ import sys
 import json
 import re
 import cv2
+import subprocess
 import tkinter as tk
 from pathlib import Path
 from readers.fbneo_reader import FBNeoReader
 from iscored_client import IScoredClient
 
 
-def show_achievement_toast(title: str, message: str, is_success: bool = True, display_time_ms: int = 3500):
+def run_toast_gui(title: str, message: str, is_success: bool = True, display_time_ms: int = 3500):
     """
-    Muestra un mensaje emergente animado arriba a la derecha del escritorio
-    simulando la notificación de un logro de RetroArch.
+    Renderiza la ventana flotante OSD en su propio proceso independiente.
     """
     try:
         root = tk.Tk()
         root.overrideredirect(True)           # Sin marco ni barra de ventana
-        root.wm_attributes("-topmost", True)  # Siempre por encima del resto de ventanas
+        root.wm_attributes("-topmost", True)  # Siempre por encima de Attract-Mode
 
         bg_color = "#121820"
         border_color = "#2ecc71" if is_success else "#e74c3c"
         text_color = "#ffffff"
         accent_color = "#2ecc71" if is_success else "#e74c3c"
+
+        root.config(bg=bg_color)
 
         frame = tk.Frame(root, bg=bg_color, highlightbackground=border_color, highlightthickness=2)
         frame.pack(fill="both", expand=True)
@@ -33,19 +35,21 @@ def show_achievement_toast(title: str, message: str, is_success: bool = True, di
         lbl_msg.pack(anchor="w", padx=12, pady=(0, 8))
 
         root.update_idletasks()
-        width = root.winfo_width()
+        width = root.winfo_reqwidth()
+        height = root.winfo_reqheight()
         screen_width = root.winfo_screenwidth()
 
         target_x = screen_width - width - 20
         start_x = screen_width + 10  # Posición fuera de pantalla a la derecha
         y = 20                       # Margen superior
 
-        root.geometry(f"+{start_x}+{y}")
+        # Ajuste estricto del tamaño a la franja del toast (evita recuadros negros completos)
+        root.geometry(f"{width}x{height}+{start_x}+{y}")
 
         def animate_slide_in(current_x):
             if current_x > target_x:
                 new_x = max(target_x, current_x - 15)
-                root.geometry(f"+{new_x}+{y}")
+                root.geometry(f"{width}x{height}+{new_x}+{y}")
                 root.after(10, lambda: animate_slide_in(new_x))
             else:
                 root.after(display_time_ms, root.destroy)
@@ -54,6 +58,25 @@ def show_achievement_toast(title: str, message: str, is_success: bool = True, di
         root.mainloop()
     except Exception as e:
         print(f"[WARN] No se pudo desplegar la notificación OSD: {e}")
+
+
+def show_achievement_toast(title: str, message: str, is_success: bool = True):
+    """
+    Lanza la notificación en un proceso en segundo plano totalmente independiente.
+    Esto permite que ScoreBridge finalice de inmediato y Attract-Mode muestre su pantalla sin esperas.
+    """
+    try:
+        script_path = str(Path(__file__).resolve())
+        subprocess.Popen([
+            sys.executable,
+            script_path,
+            "--toast",
+            title,
+            message,
+            "1" if is_success else "0"
+        ])
+    except Exception as e:
+        print(f"[WARN] No se pudo lanzar el toast en segundo plano: {e}")
 
 
 def load_config(config_path="config.json") -> tuple[dict, Path]:
@@ -89,7 +112,6 @@ def find_id_in_qr_folder(rom_name: str, game_name: str, qr_folder_path: Path = P
 
         clean_filename = re.sub(r'[^a-zA-Z0-9]', '', qr_file.stem).lower()
 
-        # Comprobar coincidencia con la ROM o el nombre
         if (clean_filename == clean_rom or 
             clean_filename == clean_game or 
             clean_filename in clean_game or 
@@ -213,10 +235,8 @@ def main():
     games = config.get("games", {})
 
     target_rom = sys.argv[1].lower().strip()
-
     config_updated = False
 
-    # 1. Si la ROM no existe en config.json, la creamos
     if target_rom not in games:
         print(f" [Auto-discovery] Nueva ROM detectada: '{target_rom}'. Añadiendo a config.json...")
         games[target_rom] = {
@@ -229,7 +249,6 @@ def main():
 
     game_info = games[target_rom]
 
-    # 2. Si iscored_id está vacío, buscamos la imagen QR en la carpeta 'qrcodes/'
     if not game_info.get("iscored_id"):
         game_name = game_info.get("name", target_rom)
         print(f" [Auto-discovery] Buscando código QR local para '{game_name}' ({target_rom})...")
@@ -242,14 +261,19 @@ def main():
         else:
             print(" [Auto-discovery] No se encontró una imagen QR en 'qrcodes/'. El ID se mantendrá vacío.")
 
-    # Guardar config.json si se añadió la ROM o el ID
     if config_updated:
         config["games"] = games
         save_config(config, config_path)
 
-    # 3. Procesar y subir puntuación
     process_game(target_rom, games[target_rom], reader, iscored_client, default_initials, hi_folder)
 
 
 if __name__ == "__main__":
-    main()
+    # Modo de ejecución de la notificación OSD
+    if len(sys.argv) > 1 and sys.argv[1] == "--toast":
+        toast_title = sys.argv[2] if len(sys.argv) > 2 else "Notificación"
+        toast_msg = sys.argv[3] if len(sys.argv) > 3 else ""
+        toast_success = sys.argv[4] == "1" if len(sys.argv) > 4 else True
+        run_toast_gui(toast_title, toast_msg, toast_success)
+    else:
+        main()
