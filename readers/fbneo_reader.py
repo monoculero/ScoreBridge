@@ -238,8 +238,9 @@ class FBNeoReader:
                 entries=entries
             )
 
+        
         # Manejo específico para ESWAT (Bloques de 10 bytes)
-        if clean_rom in {"eswat", "eswatbl"}:
+        elif clean_rom in {"eswat", "eswatbl"}:
             entry_size = 10
             num_entries = len(data) // entry_size
 
@@ -736,6 +737,38 @@ class FBNeoReader:
                     entries.append(
                         ScoreEntry(
                             rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"vendetta", "vendettaj", "vendetta2pw", "vendettar"}:
+            entry_size = 5
+            num_entries = len(data) // entry_size  # 40 bytes / 5 bytes = 8 entradas (Top 8)
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                score_bytes = chunk[0:2]
+                name_bytes = chunk[2:5]
+
+                try:
+                    # Se elimina la multiplicación por 100
+                    score = self._decode_bcd_score(score_bytes)
+                except Exception:
+                    score = 0
+
+                player = "".join(chr(b) if 32 <= b <= 126 else " " for b in name_bytes).strip()
+                player = " ".join(player.split()) or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
                             player=player,
                             score=score
                         )
@@ -1352,6 +1385,40 @@ class FBNeoReader:
                         score=score
                     )
                 )
+
+        elif clean_rom in {"rygar", "rygarj", "rygara", "rygar2"}:
+            entry_size = 9
+            num_entries = len(data) // entry_size  # Bloques de 9 bytes
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                # Puntuación: 4 bytes BCD (del byte 1 al 4)
+                score_bytes = chunk[1:5]
+                # Nombre: 3 bytes ASCII (del byte 5 al 7)
+                name_bytes = chunk[5:8]
+
+                try:
+                    score = self._decode_bcd_score(score_bytes)
+                except Exception:
+                    score = 0
+
+                player = "".join(chr(b) if 32 <= b <= 126 else " " for b in name_bytes).strip()
+                player = " ".join(player.split()) or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
+
         else:
             raise ValueError(f"Juego de Tecmo no soportado en read_tecmo_game: '{clean_rom}'")
 
@@ -1422,6 +1489,151 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_tehkan_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Tehkan / Tecmo games reader (Bomb Jack, etc.)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"bombjack", "bombjackt", "bombjackj", "bombjack2"}:
+            if len(data) >= 166:
+                for i in range(10):
+                    # Puntuación: 4 bytes BCD Little-Endian. La tabla empieza en 0x0010 (0x000C es el 1P Score)
+                    sc_off = 0x0010 + (i * 4)
+                    sb = data[sc_off : sc_off + 4]
+                    try:
+                        score = int(f"{sb[3]:02x}{sb[2]:02x}{sb[1]:02x}{sb[0]:02x}")
+                    except ValueError:
+                        score = 0
+
+                    # Iniciales: Bloques de 10 bytes desde 0x0042
+                    init_off = 0x0042 + (i * 10)
+                    if init_off + 6 < len(data):
+                        c1 = chr(data[init_off + 2]) if 32 <= data[init_off + 2] <= 126 else " "
+                        c2 = chr(data[init_off + 4]) if 32 <= data[init_off + 4] <= 126 else " "
+                        c3 = chr(data[init_off + 6]) if 32 <= data[init_off + 6] <= 126 else " "
+                        player = f"{c1}{c2}{c3}".strip()
+                        player = " ".join(player.split()) or "AAA"
+                    else:
+                        player = "AAA"
+
+                    if score > 0:
+                        entries.append(
+                            ScoreEntry(
+                                rank=0,
+                                player=player,
+                                score=score
+                            )
+                        )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_toaplan_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Toaplan games reader (Snow Bros., etc.)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"snowbros", "snowbrosa", "snowbrosj", "snowbrosp", "snowbros3"}:
+            if len(data) >= 64:
+                for i in range(5):
+                    # Puntuación: 4 bytes BCD Big-Endian desde 0x0004 (multiplicado por 10)
+                    sc_off = 0x0004 + (i * 4)
+                    sb = data[sc_off : sc_off + 4]
+                    try:
+                        score = int(f"{sb[0]:02x}{sb[1]:02x}{sb[2]:02x}{sb[3]:02x}") * 10
+                    except ValueError:
+                        score = 0
+
+                    # Iniciales: 6 bytes por jugador desde 0x0022 (bytes impares)
+                    init_off = 0x0022 + (i * 6)
+                    if init_off + 5 < len(data):
+                        c1 = chr(data[init_off + 1]) if 32 <= data[init_off + 1] <= 126 else " "
+                        c2 = chr(data[init_off + 3]) if 32 <= data[init_off + 3] <= 126 else " "
+                        c3 = chr(data[init_off + 5]) if 32 <= data[init_off + 5] <= 126 else " "
+                        player = f"{c1}{c2}{c3}".strip()
+                        player = " ".join(player.split()) or "AAA"
+                    else:
+                        player = "AAA"
+
+                    if score > 0:
+                        entries.append(
+                            ScoreEntry(
+                                rank=0,
+                                player=player,
+                                score=score
+                            )
+                        )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_sega_system1_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Sega System 1 games reader (Wonder Boy, etc.)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        if clean_rom in {"wboy", "wboyo", "wboy2", "wboy3", "wboyu", "wbdeluxe"}:
+            # Wonder Boy muestra exactamente un Top 7 (7 filas * 16 bytes = 112 bytes)
+            max_entries = min(len(data) // 16, 7)
+            for i in range(max_entries):
+                off = i * 16
+
+                # Puntuación: 4 bytes ASCII desde off + 4 (ej. "3000" -> 3000 * 10 = 30000)
+                score_bytes = data[off + 4 : off + 8]
+                score_raw = score_bytes.decode("ascii", errors="ignore").strip()
+                try:
+                    score = int(score_raw) * 10
+                except ValueError:
+                    score = 0
+
+                # Iniciales: 8 bytes ASCII desde off + 8
+                player_bytes = data[off + 8 : off + 16]
+                player = player_bytes.decode("ascii", errors="ignore").strip()
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=i + 1,
+                            player=player,  # Puede ser "" si no introdujo iniciales
+                            score=score
+                        )
+                    )
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
     def read_table(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Read the scores table for any ROM based on your arcade system."""
         rom_clean = Path(rom_name).stem.lower().strip()
@@ -1465,7 +1677,8 @@ class FBNeoReader:
             "aliensyn",
             "passsht",
             "fantzone",
-            "eswat","eswatbl"
+            "eswat","eswatbl",
+            "wboy", "wboyo", "wboy2", "wboy3", "wboyu", "wbdeluxe"
         }
         if rom_clean in sega_sys16_roms:
             return self.read_sega_system16(file_path, rom_clean)
@@ -1497,7 +1710,8 @@ class FBNeoReader:
             "yiear",
             "ssriders", "ssridersu", "ssridersj", "ssridersb",
             "gijoe","gijoej",
-            "hcastle", "hcastlej", "hcastlep"
+            "hcastle", "hcastlej", "hcastlep",
+            "vendetta2pw","vendetta", "vendettaj"
         }
         if rom_clean in konami_roms:
             return self.read_konami_game(file_path, rom_clean)
@@ -1529,7 +1743,8 @@ class FBNeoReader:
             return self.read_namco_game(file_path, rom_clean)
 
         tecmo_roms = {
-            "gaiden", "gaideng", "gaidenj"
+            "gaiden", "gaideng", "gaidenj",
+            "rygar", "rygarj", "rygara", "rygar2"
         }
         if rom_clean in tecmo_roms:
             return self.read_tecmo_game(file_path, rom_clean)
@@ -1539,6 +1754,24 @@ class FBNeoReader:
         }
         if rom_clean in nichibutsu_roms:
             return self.read_nichibutsu_game(file_path, rom_clean)
+
+        tehkan_roms = {
+            "bombjack", "bombjackt", "bombjackj", "bombjack2"
+        }
+        if rom_clean in tehkan_roms:
+            return self.read_tehkan_game(file_path, rom_clean)
+
+        toaplan_roms = {
+            "snowbros", "snowbrosa", "snowbrosj", "snowbrosp", "snowbros3"
+        }
+        if rom_clean in toaplan_roms:
+            return self.read_toaplan_game(file_path, rom_clean)
+
+        sega_sys1_roms = {
+            "wboy", "wboyo", "wboy2", "wboy3", "wboyu", "wbdeluxe"
+        }
+        if rom_clean in sega_sys1_roms:
+            return self.read_sega_system1_game(file_path, rom_clean)
 
         raise ValueError(f"ROM no soportada o no registrada en el sistema: '{rom_name}' (limpia: '{rom_clean}')")
 

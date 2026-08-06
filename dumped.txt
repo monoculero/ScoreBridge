@@ -42,6 +42,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Haunted Castle
    - Kicker
    - Sunset Riders
+   - Vendetta
    - Yie Ar Kung-Fu
 
 8. TAD CORPORATION
@@ -63,5 +64,11 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 
 13. NICHIBUTSU
    - Kid no Hore Hore Daisakusen / Hore Kid
+
+14. TEHKAN
+   - Bombjack
+
+15. TOAPLAN
+   - Snow Bros.
 
 ============================================================
