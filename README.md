@@ -37,9 +37,12 @@ Create a folder named qrcodes inside the project root directory (C:\AttractModeP
 ### 4. Review the config_example.json file
 Modify the following values and save the file as config.json:
 
-.- default_initials --> set your default initials. 
+.- default_initials --> set your default initials.
+
 .- hi_folder --> path to the folder where RetroArch stores the .hi files
+
 .- gameroom --> name of your gameroom in iSocred
+
 .- games --> As you play new games from RetroArch, they will be automatically registered here. If the QR code image exists in the qrcodes/ folder, ScoreBridge will decode it and assign its iscored_id automatically in a single step!
 
 ### 5. Check the loader_example.bat file
