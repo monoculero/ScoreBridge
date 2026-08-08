@@ -18,12 +18,14 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Final Fight
    - Ghouls And Goblins
    - Street Fighter II 
+   - Street Fighter II C.E.
 
 4. SEGA (System 16 / System 18)
    - Altered Beast
    - E-SWAT
    - Golden Axe
    - Shinobi
+   - Out Run
 
 5. DATA EAST
    - Bad Dudes vs. DragonNinja
@@ -70,5 +72,12 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 
 15. TOAPLAN
    - Snow Bros.
+
+16. MITCHEL
+   - Pang
+
+17. SEIBU
+   - Zero Team
+   - New Zero Team
 
 ============================================================

@@ -507,11 +507,7 @@ class FBNeoReader:
             entries=entries
         )
 
-    def read_dataeast_game(self, file_path: str, rom_name: str) -> HighScoreTable:
-        """
-        Data East games reader.
-        Uses an algorithmic mathematical formula to decode font tiles for Captain America.
-        """
+    def read_sega_system16(self, file_path: str, rom_name: str) -> HighScoreTable:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -520,54 +516,114 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
 
-        is_captaven = clean_rom in {"captaven", "captavena", "captavenj", "captavenu"}
+        if clean_rom in {"goldnaxe", "goldnaxj", "goldnaxu", "goldnaxe1", "goldnaxe2"}:
+            scores = []
+            if len(data) >= 2:
+                top_record = int.from_bytes(data[0:2], byteorder="big")
+                if top_record > 0:
+                    scores.append(top_record)
 
-        if is_captaven:
-            entry_size = 32
-            num_entries = min(5, len(data) // entry_size)
+            for i in range(10):
+                off = 4 + (i * 2)
+                if off + 2 <= len(data):
+                    val = int.from_bytes(data[off : off + 2], byteorder="big")
+                    if val > 0 and val not in scores:
+                        scores.append(val)
 
-            def decode_captaven_char(b: int) -> str:
-                if b == 0 or b == 0xFF:
-                    return ""
-                
-                # Símbolos especiales (ej: el punto '.')
-                if b == 0x30:
-                    return "."
+            scores.sort(reverse=True)
 
-                # Mayúsculas: Base 0x58, saltos de 4 en 4
-                if (b - 0x58) % 4 == 0:
-                    idx = (b - 0x58) // 4
-                    if 0 <= idx < 26:
-                        return chr(ord('A') + idx)
+            for rank, score in enumerate(scores, start=1):
+                entries.append(
+                    ScoreEntry(
+                        rank=rank,
+                        player="---",
+                        score=score
+                    )
+                )
 
-                # Minúsculas: Base 0xC0, saltos de 4 en 4
-                if (b - 0xC0) % 4 == 0:
-                    idx = (b - 0xC0) // 4
-                    if 0 <= idx < 26:
-                        return chr(ord('a') + idx)
+            return HighScoreTable(
+                game_name=clean_rom.upper(),
+                rom_name=clean_rom,
+                entries=entries
+            )
 
-                return ""
+        elif clean_rom in {"outrun", "outruna", "outrunb", "outrunj", "outrundx", "outruno"}:
+            entries = []
+            entry_size = 14
+            num_entries = len(data) // entry_size
 
             for index in range(num_entries):
                 offset = index * entry_size
-                chunk = data[offset : offset + entry_size]
-
-                if len(chunk) < 16:
+                if offset + 14 > len(data):
                     break
 
-                # Puntuación en uint32 Little-Endian (bytes 0..3)
-                score_bytes = chunk[0:4]
-                try:
-                    score = struct.unpack("<I", score_bytes)[0]
-                except struct.error:
-                    score = 0
+                chunk = data[offset : offset + 14]
+                
+                # 1. Puntuación BCD (bytes 0 a 3)
+                score = self._decode_bcd_score(chunk[0:4])
 
-                # Extracción algorítmica de iniciales en offsets 4, 8 y 12
-                c1 = decode_captaven_char(chunk[4])
-                c2 = decode_captaven_char(chunk[8])
-                c3 = decode_captaven_char(chunk[12])
+                # 2. Iniciales con fuente de Sega (bytes 4 a 6)
+                chars = []
+                for b in chunk[4:7]:
+                    if 65 <= b <= 90:      # A-Z
+                        chars.append(chr(b))
+                    elif b == 0x5B:        # Punto (.)
+                        chars.append('.')
+                    elif 48 <= b <= 57:    # 0-9
+                        chars.append(chr(b))
+                    elif b == 32:          # Espacio
+                        chars.append(' ')
 
-                player = f"{c1}{c2}{c3}".strip() or "AAA"
+                player = "".join(chars).strip()
+
+                if player and score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+            # Ordenar de mayor a menor
+            entries.sort(key=lambda x: x.score, reverse=True)
+            
+            # Recortar a los 7 puestos que muestra el juego y reasignar rank
+            entries = entries[:7]
+            for rank, entry in enumerate(entries, start=1):
+                entry.rank = rank
+
+            return HighScoreTable(
+                game_name=clean_rom.upper(),
+                rom_name=clean_rom,
+                entries=entries
+            )
+
+        elif clean_rom in {"eswat", "eswatbl"}:
+            entry_size = 10
+            num_entries = len(data) // entry_size
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                if offset + 8 > len(data):
+                    break
+
+                chunk = data[offset : offset + entry_size]
+
+                score_byte = chunk[1]
+                high = (score_byte >> 4) & 0x0F
+                low = score_byte & 0x0F
+                score = (high * 10 + low) * 10000
+
+                player_bytes = chunk[4:7]
+                player_chars = []
+                for b in player_bytes:
+                    if 32 <= b <= 126:
+                        player_chars.append(chr(b))
+                    else:
+                        player_chars.append(".")
+
+                player = "".join(player_chars).strip() or "..."
 
                 if score > 0:
                     entries.append(
@@ -577,31 +633,45 @@ class FBNeoReader:
                             score=score
                         )
                     )
-        else:
-            entry_size = 8
-            num_entries = len(data) // entry_size
 
-            for index in range(num_entries):
-                offset = index * entry_size
-                chunk = data[offset : offset + entry_size]
+            entries.sort(key=lambda x: x.score, reverse=True)
+            for rank, entry in enumerate(entries, start=1):
+                entry.rank = rank
 
-                if len(chunk) < 8:
-                    break
+            return HighScoreTable(
+                game_name=clean_rom.upper(),
+                rom_name=clean_rom,
+                entries=entries
+            )
 
-                player_bytes = chunk[:3]
-                score_bytes = chunk[4:7]
+        # Bloque genérico
+        entry_size = 8
+        max_entries = min(20, len(data) // entry_size)
 
-                player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
-                score = self._decode_bcd_score(score_bytes)
+        for index in range(max_entries):
+            offset = index * entry_size
+            chunk = data[offset : offset + entry_size]
 
-                if player and score > 0:
-                    entries.append(
-                        ScoreEntry(
-                            rank=index + 1,
-                            player=player,
-                            score=score
-                        )
+            if len(chunk) < 8:
+                break
+
+            score_bytes = chunk[:4]
+            player_bytes = chunk[5:8]
+
+            if not all(32 <= b <= 126 for b in player_bytes):
+                break
+
+            player = "".join(chr(b) for b in player_bytes).strip()
+            score = self._decode_bcd_score(score_bytes)
+
+            if player and score > 0:
+                entries.append(
+                    ScoreEntry(
+                        rank=index + 1,
+                        player=player,
+                        score=score
                     )
+                )
 
         entries.sort(key=lambda x: x.score, reverse=True)
         for rank, entry in enumerate(entries, start=1):
@@ -1323,12 +1393,29 @@ class FBNeoReader:
                     entries.append(
                         ScoreEntry(
                             rank=1,
-                            player="HIGH SCORE",
+                            player="AAA",
                             score=score
                         )
                     )
+
+        elif clean_rom in {"pacman", "pacmanf", "puckman", "puckmanf"}:
+            score = 0
+            multiplier = 10
+            for b in data:
+                if 0 <= b <= 9:
+                    score += b * multiplier
+                    multiplier *= 10
+                    
+            if score > 0:
+                entries.append(
+                    ScoreEntry(
+                        rank=1,
+                        player="AAA",
+                        score=score
+                    )
+                )
         else:
-            raise ValueError(f"Juego de Namco no soportado en read_namco_game: '{clean_rom}'")
+            raise ValueError(f"Game not supported in read_namco_game: '{clean_rom}'")
 
         return HighScoreTable(
             game_name=clean_rom.upper(),
@@ -1346,7 +1433,7 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
 
-        if clean_rom in {"gaiden", "gaideng", "gaidenj"}:
+        if clean_rom in {"gaiden", "gaideng", "gaidenj", "shadoww", "shadowwj", "shadowwa"}:
             entry_size = 16
             start_offset = 0x10
             num_entries = 10
@@ -1376,7 +1463,7 @@ class FBNeoReader:
                 ).strip()[:6]
 
                 if not player:
-                    player = "NINJA"
+                    player = "AAA"
 
                 entries.append(
                     ScoreEntry(
@@ -1634,6 +1721,125 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_mitchell_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        entry_size = 16
+        num_entries = len(data) // entry_size
+
+        for index in range(num_entries):
+            offset = index * entry_size
+            chunk = data[offset : offset + entry_size]
+
+            if len(chunk) < entry_size:
+                break
+
+            # 1. Puntuación BCD en los primeros 3 bytes
+            score_bytes = chunk[0:3]
+            score = self._decode_bcd_score(score_bytes)
+
+            # 2. Iniciales en los siguientes 3 bytes (3 a 5)
+            name_bytes = chunk[3:6]
+            player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip()
+
+            if score > 0:
+                entries.append(
+                    ScoreEntry(
+                        rank=index + 1,
+                        player=player,
+                        score=score
+                    )
+                )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
+    def read_seibu_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        
+        rom_clean = Path(rom_name).stem.lower().strip()
+
+        if rom_clean in {"zeroteam", "zeroteama", "zeroteamb", "zeroteamc", "zeroteamj", "zeroteamu"}:
+            entry_size = 16
+            num_entries = 5
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                
+                # Puntuación de 32 bits en Little Endian (bytes 0 a 3)
+                if offset + 4 <= len(data):
+                    score_bytes = data[offset : offset + 4]
+                    score = int.from_bytes(score_bytes, byteorder="little")
+                else:
+                    break
+
+                # Iniciales de 3 caracteres ASCII (bytes 8 a 10)
+                name_offset = offset + 8
+                if name_offset < len(data):
+                    player_bytes = data[name_offset : name_offset + 3]
+                    player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
+                else:
+                    player = "AAA"
+
+                if player and score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        else:
+            # Estrategia genérica para Seibu Kaihatsu (bloques de 16 bytes LE)
+            entry_size = 16
+            num_entries = min(len(data) // entry_size, 10)
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                if offset + 11 <= len(data):
+                    score = int.from_bytes(data[offset : offset + 4], byteorder="little")
+                    player_bytes = data[offset + 8 : offset + 11]
+                    player = "".join(chr(b) for b in player_bytes if 32 <= b <= 126).strip()
+
+                    if player and score > 0:
+                        entries.append(
+                            ScoreEntry(
+                                rank=0,
+                                player=player,
+                                score=score
+                            )
+                        )
+
+        entries.sort(key=lambda x: x.score, reverse=True)
+        entries = entries[:10]
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+
+        return HighScoreTable(
+            game_name=rom_clean.upper(),
+            rom_name=rom_clean,
+            entries=entries
+        )
+
     def read_table(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Read the scores table for any ROM based on your arcade system."""
         rom_clean = Path(rom_name).stem.lower().strip()
@@ -1662,7 +1868,7 @@ class FBNeoReader:
 
         cps_roms = {
             "3wonders",
-            "sf2",
+            "sf2","sf2ce","sf2hf","sf2rb","sf2t","sf2accp2","sf2m3",
             "ffight",
             "dino","dinou",
             "ghouls", "ghoulsu", "ghoulsj"
@@ -1686,7 +1892,7 @@ class FBNeoReader:
         dataeast_roms = {
             "baddudes","drgnninja",
             "slyspy",
-            "robocop",
+            "robocop", "robocopu", "robocopo"
             "captaven","captavena","captavenj","captavenu"
         }
         if rom_clean in dataeast_roms:
@@ -1744,7 +1950,8 @@ class FBNeoReader:
 
         tecmo_roms = {
             "gaiden", "gaideng", "gaidenj",
-            "rygar", "rygarj", "rygara", "rygar2"
+            "rygar", "rygarj", "rygara", "rygar2",
+            "shadoww", "shadowwa", "shadowwj"
         }
         if rom_clean in tecmo_roms:
             return self.read_tecmo_game(file_path, rom_clean)
@@ -1773,11 +1980,26 @@ class FBNeoReader:
         if rom_clean in sega_sys1_roms:
             return self.read_sega_system1_game(file_path, rom_clean)
 
+        mitchell_roms = {
+            "pang", "panga", "pangb", "pangc", "spang", "spangj", "bbros"
+        }
+        if rom_clean in mitchell_roms:
+            return self.read_mitchell_game(file_path, rom_clean)
+
+        seibu_roms = {
+            "zeroteam", "zeroteama", "zeroteamb", "zeroteamc", "zeroteamj", "zeroteamu", "nzeroteam"
+        }
+        if rom_clean in seibu_roms:
+            return self.read_seibu_game(file_path, rom_clean)
+
         raise ValueError(f"ROM no soportada o no registrada en el sistema: '{rom_name}' (limpia: '{rom_clean}')")
 
     def get_best_score_for_player(self, file_path: str, rom_name: str, initials: str) -> Optional[ScoreEntry]:
-        """Get the highest score for one or more players separated by commas."""
-        table = self.read_table(file_path, rom_name)
+        # Tomamos la primera inicial buscada como "comodín" a inyectar para juegos sin iniciales
+        default_p = initials.split(",")[0].strip().upper() if initials else "AAA"
+        
+        # Le pasamos este nuevo parámetro al ruteador principal
+        table = self.read_table(file_path, rom_name, default_player=default_p)
         target_initials_list = [init.strip().upper() for init in initials.split(",") if init.strip()]
 
         best_entry = None
