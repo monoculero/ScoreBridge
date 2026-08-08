@@ -57,3 +57,11 @@ artwork wheel collections\Arcade\logo
 artwork marquee collections\Arcade\marquee
 
 In my case, on one hand I have a folder with Retroarch, and on the other a folder with AM+, and within it I have ScoreBridge.
+=======
+### 2. Instalar Python
+Instalar desde https://www.python.org/downloads/ 
+
+### 3. Instalar dependencias de Python
+Abre una terminal (CMD o PowerShell) en la carpeta del proyecto e instala la librería necesaria para las peticiones web:
+
+pip install requests
