@@ -46,13 +46,15 @@ Modify the following values and save the file as config.json:
 In the AM+ emulator settings, make sure the executable points to loader.bat:
 
 executable C:\AttractModePlus\ScoreBridge\loader.bat
+
 args "[romfilename]"
+
 rompath C:\AttractModePlus\collections\Arcade\roms\
+
 workpath C:\RetroArch\
+
 romext .zip
+
 system Arcade
-artwork snap collections\Arcade\snap
-artwork wheel collections\Arcade\logo
-artwork marquee collections\Arcade\marquee
 
 In my case, on one hand I have a folder with Retroarch, and on the other a folder with AM+, and within it I have ScoreBridge.
