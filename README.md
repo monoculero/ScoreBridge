@@ -16,7 +16,7 @@ After selecting a game in Attract-Mode Plus (AM+) and launching it in RetroArch,
 Before setting up the project, make sure you have installed on your system:
 1. **Python** (version 3.x recommended). Make sure to check the *"Add Python to PATH"* box during installation.
 2. **RetroArch** configured with the necessary cores (e.g., `fbneo_libretro.dll`).
-3. **Attract-Mode Plus** as a gaming frontend.
+3. **Attract-Mode Plus** as a gaming frontend (https://github.com/oomek/attractplus)
 4. **An active iScored account** with your games created in your Gameroom.
 
 ---
