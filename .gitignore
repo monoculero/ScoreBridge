@@ -11,6 +11,8 @@ __pycache__/
 config.json
 loader.bat
 .gitignore
+
+# Archivos de sistema de macOS
 .DS_Store
 
 # Ficheros roms
