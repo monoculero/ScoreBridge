@@ -1,3 +1,8 @@
+
+<p align="center">
+  <img src="logoScoreBridge.png" alt="ScoreBridge Arcade Sync" width="100%">
+</p>
+
 ## 🕹️ ScoreBridge Arcade Sync
 
 Automation system to capture high scores (.hi) from emulators in RetroArch (such as FinalBurn Neo), process them using a Python script, and automatically sync them with **iScored**, seamlessly integrated with frontends such as **Attract-Mode Plus**.
