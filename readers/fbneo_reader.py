@@ -469,6 +469,37 @@ class FBNeoReader:
                         score=score
                     )
                 )
+
+        elif rom_clean in {"sfa2", "sfa2u", "sfa2j", "sfa2a", "sfa2p"}:
+            entry_size = 16
+            num_entries = 5
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                if offset + 7 > len(data):
+                    break
+                chunk = data[offset : offset + entry_size]
+
+                # 1. Puntuación en formato BCD (4 bytes)
+                score_bytes = chunk[0:4]
+                score = self._decode_bcd_score(score_bytes)
+
+                # 2. Iniciales (cogemos exactamente 3 bytes: índices 4, 5 y 6)
+                name_bytes = chunk[4:7]
+                player_chars = []
+                for b in name_bytes:
+                    if 0 <= b <= 25:
+                        player_chars.append(chr(b + 65))
+                player = "".join(player_chars).strip() or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
         
         else:
             entry_size = 8
@@ -1084,6 +1115,86 @@ class FBNeoReader:
                     entries.append(
                         ScoreEntry(
                             rank=len(entries) + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"tmnt","tmntu","tmnta","tmntj","tmnt2po","tmnt2p","tmnt2pu","tmnt2pj"}:
+            names_offset = 0x00C8
+            name_count = 10
+            names = []
+            
+            for i in range(name_count):
+                n_off = names_offset + (i * 4)
+                if n_off + 4 <= len(data):
+                    n_bytes = data[n_off : n_off + 3]
+                    player = "".join(chr(b) for b in n_bytes if 32 <= b <= 126).strip()
+                    names.append(player or "AAA")
+                else:
+                    names.append("AAA")
+
+            # Las puntuaciones se almacenan en bloques de 2 bytes al inicio del archivo
+            for i in range(name_count):
+                s_off = i * 2
+                score = 0
+                if s_off + 2 <= len(data):
+                    score_bytes = data[s_off : s_off + 2]
+                    score = self._decode_bcd_score(score_bytes)
+                    if score == 0:
+                        try:
+                            score = int.from_bytes(score_bytes, byteorder='big')
+                        except ValueError:
+                            score = 0
+
+                player = names[i] if i < len(names) else "AAA"
+                
+                if score > 0 or player != "AAA":
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif clean_rom in {"tmnt22pu", "tmnt22p", "tmnt2", "tmnt2u", "tmnt2j"}:
+            names_offset = 0x0014
+            name_count = 10
+            names = []
+            
+            for i in range(name_count):
+                n_off = names_offset + (i * 4)
+                # Permitimos leer desde 3 bytes para capturar el último nombre (TLE) sin desbordar
+                if n_off + 3 <= len(data):
+                    n_bytes = data[n_off : n_off + 3]
+                    player = "".join(chr(b) for b in n_bytes if 32 <= b <= 126).strip()
+                    names.append(player or "AAA")
+                else:
+                    names.append("AAA")
+
+            # Las puntuaciones se almacenan en bloques de 2 bytes al inicio
+            for i in range(name_count):
+                s_off = i * 2
+                score = 0
+                if s_off + 2 <= len(data):
+                    score_bytes = data[s_off : s_off + 2]
+                    score = self._decode_bcd_score(score_bytes)
+                    if score == 0:
+                        try:
+                            score = int.from_bytes(score_bytes, byteorder='big')
+                        except ValueError:
+                            score = 0
+                    
+                    # Quitamos el multiplicador para que refleje el valor real sin multiplicar de más
+                    # (Si necesitas ajustarlo, puedes dividir o dejar el valor base)
+
+                player = names[i] if i < len(names) else "AAA"
+                
+                if score > 0 or player != "AAA":
+                    entries.append(
+                        ScoreEntry(
+                            rank=0,
                             player=player,
                             score=score
                         )
@@ -1871,7 +1982,9 @@ class FBNeoReader:
             "sf2","sf2ce","sf2hf","sf2rb","sf2t","sf2accp2","sf2m3",
             "ffight",
             "dino","dinou",
-            "ghouls", "ghoulsu", "ghoulsj"
+            "ghouls", "ghoulsu", "ghoulsj",
+            "ssf2","ssf2t","ssf2u","ssf2j",
+            "sfa2", "sfa2u", "sfa2j", "sfa2a", "sfa2p"
         }
         if rom_clean in cps_roms:
             return self.read_cps_game(file_path, rom_clean)
@@ -1917,7 +2030,9 @@ class FBNeoReader:
             "ssriders", "ssridersu", "ssridersj", "ssridersb",
             "gijoe","gijoej",
             "hcastle", "hcastlej", "hcastlep",
-            "vendetta2pw","vendetta", "vendettaj"
+            "vendetta2pw","vendetta", "vendettaj",
+            "tmnt","tmntu","tmnta","tmntj","tmnt2po","tmnt2p","tmnt2pu","tmnt2pj",
+            "tmnt22pu", "tmnt22p", "tmnt2", "tmnt2u", "tmnt2j"
         }
         if rom_clean in konami_roms:
             return self.read_konami_game(file_path, rom_clean)

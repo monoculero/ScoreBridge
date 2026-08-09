@@ -19,6 +19,8 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Ghouls And Goblins
    - Street Fighter II 
    - Street Fighter II C.E.
+   - Super Street Fighter II: The New Chellengers
+   - Street Fighter Alpha II
 
 4. SEGA (System 16 / System 18)
    - Altered Beast
@@ -46,6 +48,8 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Sunset Riders
    - Vendetta
    - Yie Ar Kung-Fu
+   - Teenage Mutant Ninja Turtles
+   - Teenage Mutant Ninja Turtles II 
 
 8. TAD CORPORATION
    - Blood Bros.
