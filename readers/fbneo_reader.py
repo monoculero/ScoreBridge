@@ -1951,6 +1951,62 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_video_system_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Video System games reader (Sonic Wings, etc.)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+    
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+    
+        if clean_rom in {"aerofgt", "aerofgth", "aerofgtb", "sonicwi", "sonicwip"}:
+            entry_stride = 16
+            num_entries = 10
+
+            for index in range(num_entries):
+                offset = index * entry_stride
+                if offset + 7 > len(data):
+                    break
+
+                chunk = data[offset : offset + entry_stride]
+
+                # 1. Iniciales (bytes 0, 1 y 2): 0x0B representa la 'A'
+                player_chars = []
+                for b in chunk[0:3]:
+                    char_code = b - 0x0B + 65
+                    if 65 <= char_code <= 90:
+                        player_chars.append(chr(char_code))
+                    elif 32 <= b <= 126:
+                        player_chars.append(chr(b))
+                    else:
+                        player_chars.append("A")
+                player = "".join(player_chars).strip() or "AAA"
+
+                # 2. Puntuación (bytes 3 a 6): Multiplicamos x100 para obtener el valor real en pantalla
+                raw_score = int.from_bytes(chunk[3:7], byteorder="big")
+                score = raw_score * 100
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+    
+        entries.sort(key=lambda x: x.score, reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry.rank = rank
+    
+        return HighScoreTable(
+            game_name=clean_rom.upper(),
+            rom_name=clean_rom,
+            entries=entries
+        )
+
     def read_table(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Read the scores table for any ROM based on your arcade system."""
         rom_clean = Path(rom_name).stem.lower().strip()
@@ -2096,7 +2152,8 @@ class FBNeoReader:
             return self.read_sega_system1_game(file_path, rom_clean)
 
         mitchell_roms = {
-            "pang", "panga", "pangb", "pangc", "spang", "spangj", "bbros"
+            "pang", "panga", "pangb", "pangc", "bbros",
+            "spang", "spangj", "spangbl", "spangbl2"
         }
         if rom_clean in mitchell_roms:
             return self.read_mitchell_game(file_path, rom_clean)
@@ -2106,6 +2163,12 @@ class FBNeoReader:
         }
         if rom_clean in seibu_roms:
             return self.read_seibu_game(file_path, rom_clean)
+
+        video_system_roms = {
+            "aerofgt", "aerofgth", "aerofgtb", "sonicwi", "sonicwip"
+        }
+        if rom_clean in video_system_roms:
+            return self.read_video_system_game(file_path, rom_clean)
 
         raise ValueError(f"ROM no soportada o no registrada en el sistema: '{rom_name}' (limpia: '{rom_clean}')")
 

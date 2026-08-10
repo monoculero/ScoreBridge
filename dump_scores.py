@@ -5,7 +5,7 @@ def main():
     reader = FBNeoReader()
     
     # CAMBIA EL NOMBRE DE LA ROM SOLO AQUÍ
-    rom_name = "tmnt22pu"
+    rom_name = "aerofgt"
     
     # La ruta del archivo se genera automáticamente usando el nombre de la rom
     hi_path = f"hi/{rom_name}.hi"
