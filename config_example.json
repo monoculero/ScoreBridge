@@ -1,5 +1,14 @@
 {
-  "default_initials": "ABC",
+  "players": [
+    {
+      "name": "Player One",
+      "initials": "ABC"
+    },
+    {
+      "name": "Player Two",
+      "initials": "DEF,GHI"
+    }
+  ],
   "hi_folder": "path_folder_hi_scrores_files",
   "iscored": {
     "enabled": true,
@@ -9,7 +18,6 @@
     "sf2": {
       "name": "Street Fighter II",
       "hi_file": "sf2.hi",
-      "initials": "ABC",
       "iscored_id": "ID_ISCORED_GAME"
     }
   }
