@@ -42,7 +42,24 @@ Create a folder named qrcodes inside the project root directory (C:\AttractModeP
 ### 4. Review the config_example.json file
 Modify the following values and save the file as config.json:
 
-.- default_initials --> set your default initials.
+.- players --> Configure the players whose scores should be detected and uploaded. Each entry maps the player's name in iScored (`name`) to the initials used in the local `.hi` files (`initials`).
+
+For example:
+
+```json
+"players": [
+  {
+    "name": "Player One",
+    "initials": "ABC"
+  },
+  {
+    "name": "Player Two",
+    "initials": "DEF,GHI"
+  }
+]
+```
+
+Use commas in `initials` when the same player may use more than one set of initials. ScoreBridge searches every configured player and uploads the highest matching score using that player's iScored name.
 
 .- hi_folder --> path to the folder where RetroArch stores the .hi files
 
