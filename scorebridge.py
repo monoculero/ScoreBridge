@@ -43,7 +43,7 @@ def run_toast_gui(title: str, message: str, is_success: bool = True, display_tim
         start_x = screen_width + 10  # Posición fuera de pantalla a la derecha
         y = 20                       # Margen superior
 
-        # Ajuste estricto del tamaño a la franja del toast (evita recuadros negros completos)
+        # Ajuste estricto del tamaño a la franja del toast
         root.geometry(f"{width}x{height}+{start_x}+{y}")
 
         def animate_slide_in(current_x):
@@ -63,7 +63,6 @@ def run_toast_gui(title: str, message: str, is_success: bool = True, display_tim
 def show_achievement_toast(title: str, message: str, is_success: bool = True):
     """
     Lanza la notificación en un proceso en segundo plano totalmente independiente.
-    Esto permite que ScoreBridge finalice de inmediato y Attract-Mode muestre su pantalla sin esperas.
     """
     try:
         script_path = str(Path(__file__).resolve())
@@ -133,54 +132,66 @@ def find_id_in_qr_folder(rom_name: str, game_name: str, qr_folder_path: Path = P
     return ""
 
 
-def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_client: IScoredClient, default_initials: str, hi_folder: Path):
+def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_client: IScoredClient, players_cfg: list, hi_folder: Path):
     hi_filename = game_info.get("hi_file", f"{rom_name}.hi")
     hi_path = hi_folder / hi_filename
-    
-    raw_initials = game_info.get("initials", default_initials)
-    target_initials_list = [init.strip().upper() for init in raw_initials.split(",") if init.strip()]
+
+    best_match = None
 
     try:
-        best_entry = None
-        for target_init in target_initials_list:
-            entry = reader.get_best_score_for_player(str(hi_path), rom_name, target_init)
-            if entry:
-                if not best_entry or entry.score > best_entry.score:
-                    best_entry = entry
+        # Recorremos cada jugador configurado en la lista global "players"
+        for p_info in players_cfg:
+            raw_initials = p_info.get("initials", "")
+            p_name = p_info.get("name", "Player").strip()
+            
+            target_initials_list = [init.strip().upper() for init in raw_initials.split(",") if init.strip()]
+
+            for target_init in target_initials_list:
+                entry = reader.get_best_score_for_player(str(hi_path), rom_name, target_init)
+                if entry:
+                    if not best_match or entry.score > best_match["entry"].score:
+                        best_match = {
+                            "entry": entry,
+                            "iscored_name": p_name
+                        }
 
         game_name = game_info.get("name", rom_name)
         print("===================================")
         print(f" JUEGO : {game_name} ({rom_name})")
         print("===================================")
 
-        if best_entry:
-            print(f"INICIALES BUSCADAS : {', '.join(target_initials_list)}")
-            print(f"JUGADOR REGISTRADO : {best_entry.player}")
+        if best_match:
+            best_entry = best_match["entry"]
+            iscored_player_name = best_match["iscored_name"]
+
+            print(f"INICIALES EN NVRAM : {best_entry.player}")
+            print(f"JUGADOR EN ISCORED : {iscored_player_name}")
             print(f"PUESTO EN TABLA    : #{best_entry.rank}")
             print(f"MEJOR PUNTUACIÓN   : {best_entry.score:,}")
 
             iscored_id = game_info.get("iscored_id")
             if iscored_client and iscored_id:
-                current_score = iscored_client.get_player_score_on_iscored(iscored_id, best_entry.player)
+                # Comprobamos en iScored usando el nombre completo mapeado
+                current_score = iscored_client.get_player_score_on_iscored(iscored_id, iscored_player_name)
                 
                 if current_score > 0 and best_entry.score <= current_score:
                     print(f" [Info] Puntuación inferior o igual a la existente ({best_entry.score:,} <= {current_score:,}). Descartada.")
                     show_achievement_toast(
                         title="ℹ️ Puntuación no superada",
-                        message=f"La marca de {best_entry.player} ({best_entry.score:,}) no supera el récord.",
+                        message=f"La marca de {iscored_player_name} ({best_entry.score:,}) no supera el récord.",
                         is_success=False
                     )
                 else:
                     res = iscored_client.submit_score(
                         game_id_or_name=iscored_id,
-                        player_name=best_entry.player,
+                        player_name=iscored_player_name,
                         score=best_entry.score,
                     )
                     
                     if res and getattr(res, "status_code", 200) in (200, 201):
                         show_achievement_toast(
                             title=f"🏆 Puntuación Subida - {game_name}",
-                            message=f"{best_entry.player}: {best_entry.score:,}",
+                            message=f"{iscored_player_name}: {best_entry.score:,}",
                             is_success=True
                         )
                     else:
@@ -198,10 +209,10 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                     is_success=False
                 )
         else:
-            print(f"Sin registros para las iniciales: {', '.join(target_initials_list)}")
+            print("Sin registros para las iniciales configuradas en 'players'.")
             show_achievement_toast(
                 title="？ iScored",
-                message="Sin registros para las iniciales indicadas",
+                message="Sin registros para los jugadores configurados",
                 is_success=False
             )
 
@@ -224,7 +235,7 @@ def main():
     config, config_path = load_config("config.json")
     reader = FBNeoReader()
 
-    default_initials = config.get("default_initials", "ALF")
+    players_cfg = config.get("players", [{"initials": "ALF", "name": "Alfredo"}])
     hi_folder = Path(config.get("hi_folder", "hi"))
 
     iscored_cfg = config.get("iscored", {})
@@ -242,7 +253,6 @@ def main():
         games[target_rom] = {
             "name": target_rom.lower(),
             "hi_file": f"{target_rom}.hi",
-            "initials": default_initials,
             "iscored_id": ""
         }
         config_updated = True
@@ -265,7 +275,7 @@ def main():
         config["games"] = games
         save_config(config, config_path)
 
-    process_game(target_rom, games[target_rom], reader, iscored_client, default_initials, hi_folder)
+    process_game(target_rom, games[target_rom], reader, iscored_client, players_cfg, hi_folder)
 
 
 if __name__ == "__main__":
