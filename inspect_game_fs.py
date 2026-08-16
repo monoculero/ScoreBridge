@@ -42,5 +42,5 @@ def inspect_fs_file(file_path: str | Path, bytes_per_line: int = 16) -> None:
 
 
 if __name__ == "__main__":
-    target_file = sys.argv[1] if len(sys.argv) > 1 else "hi/shdancer.fs"
+    target_file = sys.argv[1] if len(sys.argv) > 1 else "hi/samsho.fs"
     inspect_fs_file(target_file)

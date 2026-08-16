@@ -32,6 +32,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 5. DATA EAST
    - Bad Dudes vs. DragonNinja
    - Captain America and The Defendants / The Avengers
+   - Chelnov
    - RoboCop
    - Sly Spy
 
@@ -46,10 +47,10 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Haunted Castle
    - Kicker
    - Sunset Riders
+   - Teenage Mutant Ninja Turtles
+   - Teenage Mutant Ninja Turtles II
    - Vendetta
    - Yie Ar Kung-Fu
-   - Teenage Mutant Ninja Turtles
-   - Teenage Mutant Ninja Turtles II 
 
 8. TAD CORPORATION
    - Blood Bros.
@@ -79,6 +80,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 
 16. MITCHEL
    - Pang
+   - Super Pang
 
 17. SEIBU
    - Zero Team

@@ -4,17 +4,30 @@ from readers.fbneo_reader import FBNeoReader
 def main():
     reader = FBNeoReader()
     
-    # CAMBIA EL NOMBRE DE LA ROM SOLO AQUÍ
-    rom_name = "aerofgt"
+    # CAMBIA EL NOMBRE DE LA ROM AQUÍ (da igual si pones "shdancer", "shdancer.hi" o "shdancer.fs")
+    rom_input = "chelnov"
+    clean_rom = Path(rom_input).stem.lower().strip()
     
-    # La ruta del archivo se genera automáticamente usando el nombre de la rom
-    hi_path = f"hi/{rom_name}.hi"
+    hi_dir = Path("hi")
+    
+    # Definimos las dos rutas posibles dentro de la carpeta 'hi'
+    hi_file = hi_dir / f"{clean_rom}.hi"
+    fs_file = hi_dir / f"{clean_rom}.fs"
+
+    # Prioridad: busca .hi primero; si no está, intenta con .fs
+    if hi_file.exists():
+        target_file = hi_file
+    elif fs_file.exists():
+        target_file = fs_file
+    else:
+        print(f"Error: No se encontró '{clean_rom}.hi' ni '{clean_rom}.fs' en la carpeta '{hi_dir}'.")
+        return
 
     try:
-        table = reader.read_table(hi_path, rom_name)
+        table = reader.read_table(str(target_file), clean_rom)
 
         print("===================================")
-        print(f" TABLA COMPLETA: {table.game_name}")
+        print(f" TABLA COMPLETA: {table.game_name} ({target_file.name})")
         print("===================================")
         print("POS  | JUGADOR    | PUNTUACIÓN")
         print("-----------------------------------")
@@ -24,10 +37,8 @@ def main():
 
         print("===================================")
 
-    except FileNotFoundError:
-        print(f"No se encontró el archivo en: {hi_path}")
     except Exception as e:
-        print(f"Error al leer la tabla: {e}")
+        print(f"Error al leer la tabla de {target_file.name}: {e}")
 
 if __name__ == "__main__":
     main()

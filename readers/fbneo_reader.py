@@ -238,6 +238,51 @@ class FBNeoReader:
                 entries=entries
             )
 
+        # Shadow Dancer
+        elif clean_rom in {"shdancer", "shdancbl", "shdancer1", "shdancer2", "shdancerj"}:
+            # En volcados .fs (RAM M68000), los bytes vienen permutados por palabras de 16 bits (Word Swap)
+            swapped_data = bytearray(len(data))
+            for i in range(0, len(data) - 1, 2):
+                swapped_data[i] = data[i + 1]
+                swapped_data[i + 1] = data[i]
+
+            base_offset = 0x3400
+            entry_size = 10  # 10 bytes por entrada
+            max_entries = 8  # Shadow Dancer almacena hasta 8 puestos
+
+            for index in range(max_entries):
+                offset = base_offset + (index * entry_size)
+                if offset + 8 > len(swapped_data):
+                    break
+
+                # Puntuación BCD (3 bytes: ej. 0x16, 0x79, 0x00 -> 167900)
+                b1 = swapped_data[offset + 1]
+                b2 = swapped_data[offset + 2]
+                b3 = swapped_data[offset + 3]
+
+                score_str = f"{b1:02X}{b2:02X}{b3:02X}"
+                score = int(score_str) if score_str.isdigit() else 0
+
+                # Iniciales (3 caracteres ASCII en los bytes 5, 6 y 7)
+                player_bytes = swapped_data[offset + 5 : offset + 8]
+                player_chars = [chr(b) for b in player_bytes if 32 <= b <= 126]
+                player = "".join(player_chars).strip() or default_player
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+            return HighScoreTable(
+                game_name=clean_rom.upper(),
+                rom_name=clean_rom,
+                entries=entries
+            )
+
         # OutRun
         elif clean_rom in {"outrun", "outruna", "outrunb", "outrunj", "outrundx", "outruno"}:
             entry_size = 14
@@ -572,7 +617,7 @@ class FBNeoReader:
         )
 
     def read_dataeast_game(self, file_path: str, rom_name: str) -> HighScoreTable:
-        """Data East games reader (Robocop, Bad Dudes, Sly Spy, Captain America, etc.)."""
+        """Data East games reader (Robocop, Bad Dudes, Sly Spy, Chelnov, etc.)."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -581,6 +626,26 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
 
+        if clean_rom == "chelnov":
+            max_entries = 11
+            for index in range(max_entries):
+                score_offset = 0x0004 + (index * 4)  # Salta el Top Score de 0x0000
+                name_offset = 0x0030 + (index * 4)
+
+                if score_offset + 4 > len(data) or name_offset + 3 > len(data):
+                    break
+
+                score_bytes = data[score_offset : score_offset + 4]
+                player_bytes = data[name_offset : name_offset + 3]
+
+                player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in player_bytes).strip() or "AAA"
+                score = self._decode_bcd_score(score_bytes)
+
+                if score > 0:
+                    entries.append(ScoreEntry(rank=index + 1, player=player, score=score))
+
+            return HighScoreTable(game_name="CHELNOV", rom_name=clean_rom, entries=entries)
+        
         entry_size = 8
         num_entries = min(10, len(data) // entry_size)
 
@@ -597,23 +662,13 @@ class FBNeoReader:
             score = self._decode_bcd_score(score_bytes)
 
             if score > 0:
-                entries.append(
-                    ScoreEntry(
-                        rank=index + 1,
-                        player=player,
-                        score=score
-                    )
-                )
+                entries.append(ScoreEntry(rank=index + 1, player=player, score=score))
 
         entries.sort(key=lambda x: x.score, reverse=True)
         for rank, entry in enumerate(entries, start=1):
             entry.rank = rank
 
-        return HighScoreTable(
-            game_name=clean_rom.upper(),
-            rom_name=clean_rom,
-            entries=entries
-        )
+        return HighScoreTable(game_name=clean_rom.upper(), rom_name=clean_rom, entries=entries)
 
     def read_irem_game(self, file_path: str, rom_name: str) -> HighScoreTable:
         """Irem games reader (supports Kung-Fu Master, Hammerin' Harry, etc.)."""
@@ -1862,6 +1917,74 @@ class FBNeoReader:
             entries=entries
         )
 
+    def read_neogeo_game(self, file_path: str, rom_name: str, default_player: str = "AAA") -> HighScoreTable:
+        """Lector unificado para juegos del sistema SNK Neo Geo (archivos .fs / RAM dumps)."""
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+
+        data = path.read_bytes()
+        entries = []
+        clean_rom = Path(rom_name).stem.lower().strip()
+
+        # =========================================================================
+        # Metal Slug (Serie: Metal Slug 1, 2, X, 3, 4, 5)
+        # =========================================================================
+        if clean_rom in {"mslug", "mslug2", "mslugx", "mslug3", "mslug4", "mslug5"}:
+            swapped_data = bytearray(len(data))
+            for i in range(0, len(data) - 1, 2):
+                swapped_data[i] = data[i + 1]
+                swapped_data[i + 1] = data[i]
+
+            base_offset = 0x0322
+            stride = 12
+            max_entries = 10
+
+            for index in range(max_entries):
+                offset = base_offset + (index * stride)
+                if offset + 12 > len(swapped_data):
+                    break
+
+                b0, b1, b2, b3 = swapped_data[offset + 2 : offset + 6]
+                score_str = f"{b0:02X}{b1:02X}{b2:02X}{b3:02X}"
+                score = int(score_str) if score_str.isdigit() else 0
+
+                player_chars = []
+                for j in range(3):
+                    tile_byte = swapped_data[offset + 7 + (j * 2)]
+                    if 0x82 <= tile_byte <= 0xB4:
+                        char_code = ord("A") + ((tile_byte - 0x82) // 2)
+                        player_chars.append(chr(char_code))
+                    else:
+                        player_chars.append("?")
+
+                player = "".join(player_chars).strip() or default_player
+
+                if score > 0:
+                    entries.append(ScoreEntry(rank=index + 1, player=player, score=score))
+
+            return HighScoreTable(game_name=clean_rom.upper(), rom_name=clean_rom, entries=entries)
+
+        # =========================================================================
+        # Samurai Shodown (Serie: samsho, samsho2, samsho3, samsho4, etc.)
+        # =========================================================================
+        elif clean_rom in {"samsho", "samsho2", "samsho3", "samsho4", "samsho5", "samsh5sp"}:
+            swapped_data = bytearray(len(data))
+            for i in range(0, len(data) - 1, 2):
+                swapped_data[i] = data[i + 1]
+                swapped_data[i + 1] = data[i]
+
+            # [PENDIENTE DE RELLENAR CON LOS DATOS DE SAMSHO.FS]
+            base_offset = 0x0000  # <- Lo ajustaremos con el volcado
+            stride = 0            # <- Lo ajustaremos con el volcado
+            max_entries = 10
+
+            # ... lógica de lectura
+
+            return HighScoreTable(game_name=clean_rom.upper(), rom_name=clean_rom, entries=entries)
+
+        raise NotImplementedError(f"El juego de Neo Geo '{clean_rom}' no tiene implementado su parser.")
+
     def read_table(self, file_path: str, rom_name: str, default_player: str = "AAA") -> HighScoreTable:
         """Read the scores table for any ROM based on your arcade system."""
         rom_clean = Path(rom_name).stem.lower().strip()
@@ -1897,7 +2020,8 @@ class FBNeoReader:
             "goldnaxe","goldnaxj", "goldnaxu", "goldnaxe1", "goldnaxe2",
             "altbeast", "aliensyn", "passsht", "fantzone",
             "eswat","eswatbl",
-            "outrun", "outruna", "outrunb", "outrunj", "outrundx", "outruno"
+            "outrun", "outruna", "outrunb", "outrunj", "outrundx", "outruno",
+            "shdancer", "shdancbl", "shdancer1", "shdancer2", "shdancerj"
         }
         if rom_clean in sega_sys16_roms:
             return self.read_sega_system16(file_path, rom_clean, default_player=default_player)
@@ -1905,7 +2029,8 @@ class FBNeoReader:
         dataeast_roms = {
             "baddudes","drgnninja", "slyspy",
             "robocop", "robocopu", "robocopo",
-            "captaven","captavena","captavenj","captavenu"
+            "captaven","captavena","captavenj","captavenu",
+            "chelnov","chelnovj","chelnovu"
         }
         if rom_clean in dataeast_roms:
             return self.read_dataeast_game(file_path, rom_clean)
@@ -1983,6 +2108,13 @@ class FBNeoReader:
         video_system_roms = {"aerofgt", "aerofgth", "aerofgtb", "sonicwi", "sonicwip"}
         if rom_clean in video_system_roms:
             return self.read_video_system_game(file_path, rom_clean)
+
+        neogeo_roms = {
+            "mslug", "mslug2", "mslugx", "mslug3", "mslug4", "mslug5",
+            "samsho", "samsho2", "samsho3", "samsho4", "samsho5", "samsh5sp"
+        }
+        if rom_clean in neogeo_roms:
+            return self.read_neogeo_game(file_path, rom_clean, default_player=default_player)
 
         raise ValueError(f"ROM no soportada o no registrada en el sistema: '{rom_name}' (limpia: '{rom_clean}')")
 
