@@ -429,7 +429,7 @@ class FBNeoReader:
         )
 
     def read_taito_game(self, file_path: str, rom_name: str) -> HighScoreTable:
-        """Taito games reader (includes Dead Connection)."""
+        """Taito games reader (includes Dead Connection, Elevator Action)."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -438,7 +438,36 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
 
-        if clean_rom in {"deadconx"}:
+        is_elvactr = clean_rom in {"elvactr", "elvactrj", "elevator", "elevatorb", "elevatob"} or (len(data) in (120, 125) and "elv" in clean_rom)
+        is_deadconx = clean_rom in {"deadconx", "deadconxj"}
+
+        if is_elvactr:
+            entry_size = 12
+            num_entries = min(10, len(data) // entry_size)
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                score_bytes = chunk[0:4]
+                score = int.from_bytes(score_bytes, byteorder="big")
+
+                name_bytes = chunk[8:11]
+                player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
+        elif is_deadconx:
             entry_size = 16
             num_entries = len(data) // entry_size
 
@@ -2072,7 +2101,10 @@ class FBNeoReader:
         if rom_clean in tad_roms:
             return self.read_tad_game(file_path, rom_clean)
 
-        taito_roms = {"deadconx"}
+        taito_roms = {
+            "deadconx",
+            "elvactr", "elvactrj", "elevator", "elevatorb", "elevatob"
+        }
         if rom_clean in taito_roms:
             return self.read_taito_game(file_path, rom_clean)
 

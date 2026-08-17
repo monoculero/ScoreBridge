@@ -59,6 +59,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
 
 9. TAITO
    - Dead Connection
+   - Elevator Action Returns
 
 10. JALECO
    - City Connection
