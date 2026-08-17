@@ -40,11 +40,12 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
         
+        # Detección por conjunto de ROMs y tamaño seguro de volcado
         is_1942 = clean_rom in {"1942", "1942a", "1942b", "1942w"}
-        is_gng = clean_rom in {"gng", "gnga", "makaimur", "makaimurc"}
-        is_commando = clean_rom in {"commando", "commandou", "spacegun"} or (len(data) == 94 and not is_gng)
-        is_blktiger = clean_rom in {"blktiger", "blktigr", "blkdrgon", "blkdrgno"} or len(data) == 88
-        is_gunsmoke = (clean_rom in {"gunsmoke", "gunsmrom"}) or (len(data) == 80 and not is_blktiger)
+        is_gng = clean_rom in {"gng", "gnga", "gngj", "gngt", "makaimur", "makaimura", "makaimurc"}
+        is_commando = clean_rom in {"commando", "commandou", "commandoj", "spacegun"} or (len(data) == 94 and not is_gng)
+        is_blktiger = clean_rom in {"blktiger", "blktigr", "blkdrgon", "blkdrgno"} or (len(data) == 88 and not is_gng)
+        is_gunsmoke = (clean_rom in {"gunsmoke", "gunsmrom", "gunsmokuj"}) or (len(data) == 80 and not is_blktiger)
 
         if is_1942:
             start_offset = 0x0000
@@ -99,17 +100,14 @@ class FBNeoReader:
                 player = "".join(player_chars).strip() or "AAA"
 
             elif is_gng:
+                # 1. Puntuación BCD Big-Endian (4 bytes)
                 score_bytes = chunk[:4]
+                bcd_str = "".join(f"{b:02X}" for b in score_bytes)
+                score = int(bcd_str) if bcd_str.isdigit() else 10000
+
+                # 2. Iniciales ASCII (3 bytes, admite mayúsculas y minúsculas)
                 name_bytes = chunk[4:7]
-
                 player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
-
-                bcd_str = f"{score_bytes[3]:02X}{score_bytes[2]:02X}{score_bytes[1]:02X}{score_bytes[0]:02X}"
-                try:
-                    raw_score = int(bcd_str)
-                    score = raw_score * 100 if raw_score > 0 else 10000
-                except ValueError:
-                    score = 10000
 
             elif is_commando:
                 score_bytes = chunk[:3]
@@ -119,13 +117,12 @@ class FBNeoReader:
                 score = self._decode_bcd_score(score_bytes) * 10
 
             elif is_blktiger:
+                # 1. Puntuación: 5 dígitos decimales en raw + multiplicador x10
                 score_digits = chunk[3:8]
                 score_str = "".join(str(b) for b in score_digits)
-                try:
-                    score = int(score_str) * 10
-                except ValueError:
-                    score = 0
+                score = int(score_str) * 10 if score_str.isdigit() else 0
 
+                # 2. Iniciales ASCII directas
                 name_bytes = chunk[8:16]
                 player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip() or "AAA"
 
