@@ -5,7 +5,7 @@ def main():
     reader = FBNeoReader()
     
     # CAMBIA EL NOMBRE DE LA ROM AQUÍ (da igual si pones "shdancer", "shdancer.hi" o "shdancer.fs")
-    rom_input = "commando"
+    rom_input = "1942"
     clean_rom = Path(rom_input).stem.lower().strip()
     
     hi_dir = Path("hi")

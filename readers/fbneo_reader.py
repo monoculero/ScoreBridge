@@ -55,12 +55,16 @@ class FBNeoReader:
                         chars.append(chr(ord('A') + (b - 0x0A)))
                     elif b == 0x38:
                         chars.append("©")
+                    elif b in (0x30, 0x00):
+                        chars.append(" ")  # 0x30 y 0x00 son espacios de relleno en 1942
                     elif b in (0x24, 0xFA):
                         chars.append("·")
                     elif b == 0x25:
                         chars.append("-")
                     elif 32 <= b <= 126 and chr(b).isalnum():
                         chars.append(chr(b))
+                    else:
+                        chars.append(" ")
                 return "".join(chars).strip() or "AAA"
 
             # 1.º Puesto (TOP Score independiente ubicado en 0x0172)
