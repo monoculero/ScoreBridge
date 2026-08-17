@@ -1803,7 +1803,7 @@ class FBNeoReader:
         clean_rom = Path(rom_name).stem.lower().strip()
 
         entry_size = 16
-        num_entries = len(data) // entry_size
+        num_entries = min(10, len(data) // entry_size)
 
         for index in range(num_entries):
             offset = index * entry_size
@@ -1812,11 +1812,13 @@ class FBNeoReader:
             if len(chunk) < entry_size:
                 break
 
+            # Puntuación BCD de 3 bytes multiplicada x10 (omite el 0 de unidades)
             score_bytes = chunk[0:3]
-            score = self._decode_bcd_score(score_bytes)
+            score = self._decode_bcd_score(score_bytes) * 10
 
+            # Decodificación de iniciales ASCII (3 caracteres)
             name_bytes = chunk[3:6]
-            player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip() or "AAA"
+            player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
 
             if score > 0:
                 entries.append(
