@@ -170,6 +170,25 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
             print(f"MEJOR PUNTUACIÓN   : {best_entry.score:,}")
 
             iscored_id = game_info.get("iscored_id")
+
+            # Si no tiene iscored_id, se intenta obtener leyendo la carpeta qrcodes/
+            if not iscored_id:
+                found_id = find_id_in_qr_folder(rom_name, game_name, Path("qrcodes"))
+                if found_id:
+                    print(f" [Auto-discovery] ¡ID '{found_id}' detectado en QR! Actualizando config.json...")
+                    iscored_id = found_id
+                    game_info["iscored_id"] = found_id
+
+                    # Guardar el nuevo ID en el config.json
+                    try:
+                        cfg_data, cfg_path = load_config("config.json")
+                        if "games" in cfg_data and rom_name in cfg_data["games"]:
+                            cfg_data["games"][rom_name]["iscored_id"] = found_id
+                            save_config(cfg_data, cfg_path)
+                    except Exception as err:
+                        print(f" [WARN] No se pudo guardar el ID en config.json: {err}")
+
+            # Subida a iScored
             if iscored_client and iscored_id:
                 # Comprobamos en iScored usando el nombre completo mapeado
                 current_score = iscored_client.get_player_score_on_iscored(iscored_id, iscored_player_name)
@@ -201,8 +220,8 @@ def process_game(rom_name: str, game_info: dict, reader: FBNeoReader, iscored_cl
                             is_success=False
                         )
 
-            elif not iscored_id:
-                print(" [Info] Juego sin 'iscored_id' asignado. Se omitió la subida a la nube.")
+            else:
+                print(" [Info] Juego sin 'iscored_id' asignado (no se encontró QR). Se omitió la subida a la nube.")
                 show_achievement_toast(
                     title="ℹ️ iScored",
                     message="Juego sin 'iscored_id' asignado.",

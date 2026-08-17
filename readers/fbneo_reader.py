@@ -119,10 +119,10 @@ class FBNeoReader:
                 score = self._decode_bcd_score(score_bytes) * 10
 
             elif is_blktiger:
-                score_bytes = chunk[4:8]
-                score_str = "".join(f"{b:X}" for b in score_bytes)
+                score_digits = chunk[3:8]
+                score_str = "".join(str(b) for b in score_digits)
                 try:
-                    score = int(score_str) * 100
+                    score = int(score_str) * 10
                 except ValueError:
                     score = 0
 
