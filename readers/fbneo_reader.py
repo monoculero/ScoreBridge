@@ -43,145 +43,158 @@ class FBNeoReader:
         # Detección por conjunto de ROMs y tamaño seguro de volcado
         is_1942 = clean_rom in {"1942", "1942a", "1942b", "1942w"}
         is_gng = clean_rom in {"gng", "gnga", "gngj", "gngt", "makaimur", "makaimura", "makaimurc"}
+        is_gunsmoke = clean_rom in {"gunsmoke", "gunsmrom", "gunsmokuj", "gunsmok2", "gunsmokej"} or (len(data) == 88 and "gun" in clean_rom)
+        is_blktiger = clean_rom in {"blktiger", "blktigr", "blkdrgon", "blkdrgno"} or (len(data) == 88 and not is_gng and not is_gunsmoke)
         is_commando = clean_rom in {"commando", "commandou", "commandoj", "spacegun"} or (len(data) == 94 and not is_gng)
-        is_blktiger = clean_rom in {"blktiger", "blktigr", "blkdrgon", "blkdrgno"} or (len(data) == 88 and not is_gng)
-        is_gunsmoke = (clean_rom in {"gunsmoke", "gunsmrom", "gunsmokuj"}) or (len(data) == 80 and not is_blktiger)
 
         if is_1942:
-            start_offset = 0x0000
-            entry_size = 16
-            num_entries = 5
-        elif is_gng:
-            start_offset = 0x0014
-            entry_size = 7
-            num_entries = 10
-        elif is_commando:
-            start_offset = 0x0000
-            entry_size = 13
-            num_entries = 7
-        elif is_blktiger:
-            start_offset = 0x0000
-            entry_size = 16
-            num_entries = 5
-        elif is_gunsmoke:
-            start_offset = 0x0000
-            entry_size = 16
-            num_entries = 5
-        else:
-            start_offset = 0x0000
-            entry_size = 16
-            num_entries = min(10, len(data) // entry_size)
-
-        for index in range(num_entries):
-            offset = start_offset + (index * entry_size)
-            chunk = data[offset : offset + entry_size]
-
-            if len(chunk) < entry_size:
-                break
-
-            if is_1942:
-                score_bytes = chunk[1:5]
-                score = self._decode_bcd_score(score_bytes)
-
-                name_bytes = chunk[5:13]
-                player_chars = []
+            def decode_1942_str(name_bytes: bytes) -> str:
+                chars = []
                 for b in name_bytes:
                     if 0x0A <= b <= 0x23:
-                        player_chars.append(chr(ord('A') + (b - 0x0A)))
+                        chars.append(chr(ord('A') + (b - 0x0A)))
+                    elif b == 0x38:
+                        chars.append("©")
                     elif b in (0x24, 0xFA):
-                        player_chars.append("·")
+                        chars.append("·")
                     elif b == 0x25:
-                        player_chars.append("-")
+                        chars.append("-")
                     elif 32 <= b <= 126 and chr(b).isalnum():
-                        player_chars.append(chr(b))
-                    else:
-                        player_chars.append(" ")
+                        chars.append(chr(b))
+                return "".join(chars).strip() or "AAA"
 
-                player = "".join(player_chars).strip() or "AAA"
+            # 1.º Puesto (TOP Score independiente ubicado en 0x0172)
+            if len(data) >= 0x017D:
+                top_score_bytes = data[0x0172:0x0175]
+                bcd_str = "".join(f"{b:02X}" for b in top_score_bytes)
+                top_score = int(bcd_str) if bcd_str.isdigit() else 0
+                top_name = decode_1942_str(data[0x0175:0x017D])
+                entries.append(ScoreEntry(rank=1, player=top_name, score=top_score))
 
-            elif is_gng:
-                # 1. Puntuación BCD Big-Endian (4 bytes)
-                score_bytes = chunk[:4]
+            # Puestos del 2.º al 5.º (bloques de 16 bytes desde 0x0000)
+            for i in range(4):
+                off = i * 16
+                chunk = data[off : off + 16]
+                if len(chunk) < 16:
+                    break
+                score_bytes = chunk[2:5]
                 bcd_str = "".join(f"{b:02X}" for b in score_bytes)
-                score = int(bcd_str) if bcd_str.isdigit() else 10000
+                score = int(bcd_str) if bcd_str.isdigit() else 0
+                player = decode_1942_str(chunk[5:15])
+                entries.append(ScoreEntry(rank=i + 2, player=player, score=score))
 
-                # 2. Iniciales ASCII (3 bytes, admite mayúsculas y minúsculas)
-                name_bytes = chunk[4:7]
-                player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
-
+        else:
+            if is_gng:
+                start_offset = 0x0014
+                entry_size = 7
+                num_entries = 10
             elif is_commando:
-                score_bytes = chunk[:3]
-                name_bytes = chunk[3:13]
-
-                player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126 or b in (0xB7, 0xFA)).replace(".", "·").strip() or "AAA"
-                score = self._decode_bcd_score(score_bytes) * 10
-
+                start_offset = 0x0000
+                entry_size = 13
+                num_entries = 7
             elif is_blktiger:
-                # 1. Puntuación: 5 dígitos decimales en raw + multiplicador x10
-                score_digits = chunk[3:8]
-                score_str = "".join(str(b) for b in score_digits)
-                score = int(score_str) * 10 if score_str.isdigit() else 0
-
-                # 2. Iniciales ASCII directas
-                name_bytes = chunk[8:16]
-                player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip() or "AAA"
-
+                start_offset = 0x0000
+                entry_size = 16
+                num_entries = 5
             elif is_gunsmoke:
-                score_bytes = chunk[0:4]
-                name_bytes = chunk[4:16]
-
-                player_chars = []
-                for b in name_bytes:
-                    if 0x0A <= b <= 0x23:
-                        player_chars.append(chr(ord('A') + (b - 0x0A)))
-                    elif 32 <= b <= 126 and chr(b).isalnum():
-                        player_chars.append(chr(b))
-
-                player = "".join(player_chars).strip()
-                if not player or len(player) < 2:
-                    player = "AAA"
-
-                score_hex = f"{score_bytes[2]:02X}{score_bytes[1]:02X}{score_bytes[0]:02X}"
-                try:
-                    raw_score = int(score_hex)
-                    score = raw_score * 10 if raw_score > 0 else 10000
-                except ValueError:
-                    score = 10000
-
+                start_offset = 0x0000
+                entry_size = 16
+                num_entries = 5
             else:
-                score_bytes = chunk[1:5]
-                name_bytes = chunk[7:15]
+                start_offset = 0x0000
+                entry_size = 16
+                num_entries = min(10, len(data) // entry_size)
 
-                player_chars = []
-                for b in name_bytes:
-                    if 0x0A <= b <= 0x23:
-                        player_chars.append(chr(ord('A') + (b - 0x0A)))
-                    elif b == 0x24:
-                        player_chars.append("·")
-                    elif b == 0x25:
-                        player_chars.append("-")
-                    elif b in (0x30, 0x00, 0xFF):
-                        player_chars.append(" ")
-                    elif 0x01 <= b <= 0x09:
-                        player_chars.append(str(b - 1))
-                    else:
-                        player_chars.append(" ")
+            for index in range(num_entries):
+                offset = start_offset + (index * entry_size)
+                chunk = data[offset : offset + entry_size]
 
-                player = "".join(player_chars).strip() or "AAA"
+                if len(chunk) < entry_size:
+                    break
 
-                score_hex = f"{score_bytes[2]:02X}{score_bytes[1]:02X}{score_bytes[0]:02X}"
-                try:
-                    score = int(score_hex) * 10
-                except ValueError:
-                    score = 0
+                if is_gng:
+                    score_bytes = chunk[:4]
+                    bcd_str = "".join(f"{b:02X}" for b in score_bytes)
+                    score = int(bcd_str) if bcd_str.isdigit() else 10000
 
-            entries.append(
-                ScoreEntry(
-                    rank=index + 1,
-                    player=player,
-                    score=score
+                    name_bytes = chunk[4:7]
+                    player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
+
+                elif is_commando:
+                    score_bytes = chunk[:3]
+                    name_bytes = chunk[3:13]
+
+                    raw_player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126 or b in (0xB7, 0xFA)).replace(".", "·")
+                    player = raw_player.rstrip("· ").strip() or "AAA"
+                    score = self._decode_bcd_score(score_bytes) * 10
+
+                elif is_blktiger:
+                    score_digits = chunk[3:8]
+                    score_str = "".join(str(b) for b in score_digits)
+                    score = int(score_str) * 10 if score_str.isdigit() else 0
+
+                    name_bytes = chunk[8:16]
+                    player = "".join(chr(b) for b in name_bytes if 32 <= b <= 126).strip() or "AAA"
+
+                elif is_gunsmoke:
+                    # 1. Puntuación por posición de dígitos (chunk[3] = 100k, chunk[4] = 10k)
+                    score = (chunk[3] * 100000) + (chunk[4] * 10000) + (chunk[5] * 100)
+                    if score == 0:
+                        score = 10000
+
+                    # 2. Iniciales intercaladas en índices 11, 13 y 15
+                    name_bytes = [chunk[11], chunk[13], chunk[15]]
+                    player_chars = []
+                    for b in name_bytes:
+                        if 0x0A <= b <= 0x23:
+                            player_chars.append(chr(ord('A') + (b - 0x0A)))
+                        elif b == 0x3E:
+                            player_chars.append("☎")
+                        elif b == 0x63:
+                            player_chars.append("♥")
+                        elif b == 0x38:
+                            player_chars.append("©")
+                        elif 32 <= b <= 126 and chr(b).isalnum():
+                            player_chars.append(chr(b))
+                        else:
+                            player_chars.append("·")
+
+                    player = "".join(player_chars).strip() or "AAA"
+
+                else:
+                    score_bytes = chunk[1:5]
+                    name_bytes = chunk[7:15]
+
+                    player_chars = []
+                    for b in name_bytes:
+                        if 0x0A <= b <= 0x23:
+                            player_chars.append(chr(ord('A') + (b - 0x0A)))
+                        elif b == 0x24:
+                            player_chars.append("·")
+                        elif b == 0x25:
+                            player_chars.append("-")
+                        elif b in (0x30, 0x00, 0xFF):
+                            player_chars.append(" ")
+                        elif 0x01 <= b <= 0x09:
+                            player_chars.append(str(b - 1))
+                        else:
+                            player_chars.append(" ")
+
+                    player = "".join(player_chars).strip() or "AAA"
+
+                    score_hex = f"{score_bytes[2]:02X}{score_bytes[1]:02X}{score_bytes[0]:02X}"
+                    try:
+                        score = int(score_hex) * 10
+                    except ValueError:
+                        score = 0
+
+                entries.append(
+                    ScoreEntry(
+                        rank=index + 1,
+                        player=player,
+                        score=score
+                    )
                 )
-            )
 
         entries.sort(key=lambda x: x.score, reverse=True)
         for rank, entry in enumerate(entries, start=1):
