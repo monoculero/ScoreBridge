@@ -1794,6 +1794,7 @@ class FBNeoReader:
         )
 
     def read_mitchell_game(self, file_path: str, rom_name: str) -> HighScoreTable:
+        """Mitchell hardware games reader (Pang, Super Pang, etc.)."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
@@ -1802,6 +1803,7 @@ class FBNeoReader:
         entries = []
         clean_rom = Path(rom_name).stem.lower().strip()
 
+        is_spang = clean_rom in {"spang", "spangj", "sspang"} or (len(data) >= 160 and "spang" in clean_rom)
         entry_size = 16
         num_entries = min(10, len(data) // entry_size)
 
@@ -1812,13 +1814,40 @@ class FBNeoReader:
             if len(chunk) < entry_size:
                 break
 
-            # Puntuación BCD de 3 bytes multiplicada x10 (omite el 0 de unidades)
-            score_bytes = chunk[0:3]
-            score = self._decode_bcd_score(score_bytes) * 10
+            if is_spang:
+                # 1. Puntuación BCD completa de 4 bytes (ej. 00 46 66 30 -> 466.630)
+                score_bytes = chunk[0:4]
+                bcd_str = "".join(f"{b:02X}" for b in score_bytes)
+                score = int(bcd_str) if bcd_str.isdigit() else 0
 
-            # Decodificación de iniciales ASCII (3 caracteres)
-            name_bytes = chunk[3:6]
-            player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
+                # 2. Decodificación de iniciales desde bloques de tiles de la VRAM (chunk[4:10])
+                def decode_spang_char(hi: int, lo: int) -> str:
+                    if hi == 0x00 and lo == 0xAA:
+                        return "·"
+                    elif 0x80 <= lo <= 0x92:  # Letras A - J
+                        return chr(ord('A') + (lo - 0x80) // 2)
+                    elif 0xA4 <= lo <= 0xB2:  # Letras K - R
+                        return chr(ord('A') + 10 + (lo - 0xA4) // 2)
+                    elif 0xC4 <= lo <= 0xD2:  # Letras S - Z
+                        return chr(ord('A') + 18 + (lo - 0xC4) // 2)
+                    elif 32 <= lo <= 126 and chr(lo).isalnum():
+                        return chr(lo)
+                    else:
+                        return "·"
+
+                c1 = decode_spang_char(chunk[4], chunk[5])
+                c2 = decode_spang_char(chunk[6], chunk[7])
+                c3 = decode_spang_char(chunk[8], chunk[9])
+                player = f"{c1}{c2}{c3}".strip() or "AAA"
+
+            else:
+                # Pang clásico: BCD de 3 bytes x10 + ASCII directo (3 bytes)
+                score_bytes = chunk[0:3]
+                bcd_str = "".join(f"{b:02X}" for b in score_bytes)
+                score = (int(bcd_str) * 10) if bcd_str.isdigit() else 0
+
+                name_bytes = chunk[3:6]
+                player = "".join(chr(b) if 32 <= b <= 126 else "·" for b in name_bytes).strip() or "AAA"
 
             if score > 0:
                 entries.append(
