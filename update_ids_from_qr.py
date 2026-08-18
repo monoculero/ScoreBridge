@@ -14,10 +14,17 @@ def extract_id_from_qr_url(url: str) -> str | None:
     return num_match.group(1) if num_match else None
 
 
+def extract_rom_from_brackets(text: str) -> str | None:
+    """Extrae el texto dentro de corchetes [rom] de un string."""
+    match = re.search(r'\[(.*?)\]', text)
+    return match.group(1).strip().lower() if match else None
+
+
 def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
     """
     Lee las imágenes QR de la carpeta especificada y asigna el ID a config.json
     ÚNICAMENTE para aquellos juegos cuyo 'iscored_id' esté vacío.
+    Prioriza el mapeo por ROM exacta si el nombre incluye [rom].
     """
     config, config_path = load_config("config.json")
     games = config.get("games", {})
@@ -37,7 +44,12 @@ def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
         if qr_file.suffix.lower() not in [".png", ".jpg", ".jpeg", ".bmp"]:
             continue
 
-        raw_filename = qr_file.stem  # Ej: "Bad Dudes" o "baddudes"
+        raw_filename = qr_file.stem  # Ej: "Super Pang [spang]" o "spang"
+        
+        # 1. Extraer la ROM dentro de [corchetes] si existe en el nombre del archivo
+        extracted_rom = extract_rom_from_brackets(raw_filename)
+        
+        # Nombre de archivo sin caracteres especiales para fallback
         clean_filename = re.sub(r'[^a-zA-Z0-9]', '', raw_filename).lower()
 
         # Decodificar el código QR usando OpenCV
@@ -59,15 +71,25 @@ def update_config_from_qrcodes(qr_folder_path: str = "qrcodes"):
         matched = False
         for rom_name, game_info in games.items():
             game_name = game_info.get("name", rom_name)
+            
             clean_game = re.sub(r'[^a-zA-Z0-9]', '', game_name).lower()
             clean_rom = re.sub(r'[^a-zA-Z0-9]', '', rom_name).lower()
+            game_extracted_rom = extract_rom_from_brackets(game_name)
 
-            # Comprobar coincidencia de nombre de archivo con la ROM o el nombre del juego
-            if (clean_filename == clean_game or 
-                clean_filename == clean_rom or 
-                clean_filename in clean_game or 
-                clean_game in clean_filename):
-                
+            # CRITERIO DE COINCIDENCIA INFALIBLE:
+            # 1. Coincidencia directa de la ROM del corchete [spang] con la clave del JSON ("spang")
+            # 2. Coincidencia entre corchetes del nombre del archivo y del nombre en config.json
+            # 3. Coincidencia exacta de nombre completo (sin corchetes)
+            is_match = False
+
+            if extracted_rom and extracted_rom == clean_rom:
+                is_match = True
+            elif extracted_rom and game_extracted_rom and extracted_rom == game_extracted_rom:
+                is_match = True
+            elif not extracted_rom and (clean_filename == clean_rom or clean_filename == clean_game):
+                is_match = True
+
+            if is_match:
                 existing_id = game_info.get("iscored_id")
                 
                 # Si ya tiene un ID asignado, se omite
