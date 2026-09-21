@@ -45,6 +45,7 @@ CONTROL DE COMPAÑÍAS Y ROMS PROBADAS (FBNeoReader)
    - Green Beret
    - GI. JOE
    - Haunted Castle
+   - Jail Break
    - Kicker
    - Sunset Riders
    - Teenage Mutant Ninja Turtles
