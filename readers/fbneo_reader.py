@@ -839,6 +839,51 @@ class FBNeoReader:
                         )
                     )
 
+        elif clean_rom in {"jailbrek", "jailbreku", "jailbrekj"}:
+            entry_size = 8
+            num_entries = 10
+
+            def decode_jailbrek_char(b: int) -> str:
+                if 0x11 <= b <= 0x2A:
+                    return chr(ord('A') + (b - 0x11))
+                elif b in (0x0C, 0x0D, 0x2D):
+                    return "."
+                elif 0x01 <= b <= 0x0A:
+                    return str(b - 1)
+                elif b in (0x00, 0x10):
+                    return " "
+                return ""
+
+            for index in range(num_entries):
+                offset = index * entry_size
+                chunk = data[offset : offset + entry_size]
+
+                if len(chunk) < entry_size:
+                    break
+
+                # 1. Tres bytes BCD: chunk[0:3] multiplicados por 10 (2530 * 10 = 25,300)
+                score_bytes = chunk[0:3]
+                score = self._decode_bcd_score(score_bytes) * 10
+
+                # 2. Tres bytes de iniciales: chunk[5:8]
+                name_bytes = chunk[5:8]
+                player_chars = [
+                    decode_jailbrek_char(b)
+                    for b in name_bytes
+                ]
+
+                player = "".join(player_chars).strip()
+                player = " ".join(player.split()) or "AAA"
+
+                if score > 0:
+                    entries.append(
+                        ScoreEntry(
+                            rank=index + 1,
+                            player=player,
+                            score=score
+                        )
+                    )
+
         elif clean_rom in {"vendetta", "vendettaj", "vendetta2pw", "vendettar"}:
             entry_size = 5
             num_entries = len(data) // entry_size
@@ -2123,7 +2168,8 @@ class FBNeoReader:
             "hcastle", "hcastlej", "hcastlep",
             "vendetta2pw","vendetta", "vendettaj",
             "tmnt","tmntu","tmnta","tmntj","tmnt2po","tmnt2p","tmnt2pu","tmnt2pj",
-            "tmnt22pu", "tmnt22p", "tmnt2", "tmnt2u", "tmnt2j"
+            "tmnt22pu", "tmnt22p", "tmnt2", "tmnt2u", "tmnt2j",
+            "jailbrek", "jailbreku", "jailbrekj"
         }
         if rom_clean in konami_roms:
             return self.read_konami_game(file_path, rom_clean)
